@@ -1,0 +1,132 @@
+export type User = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  agency: Agency;
+};
+
+export type Agency = { id: string; name: string; slug: string; brand_color: string; logo_url: string | null };
+
+export type AgentSummary = { id: string; name: string; description: string; is_active: boolean };
+
+export type Client = {
+  id: string;
+  name: string;
+  industry: string;
+  description: string;
+  general_context: string;
+  is_active: boolean;
+  portal_slug: string;
+  portal_enabled: boolean;
+  portal_title: string;
+  portal_email: string | null;
+  portal_password_configured: boolean;
+  agents: AgentSummary[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type Agent = {
+  id: string;
+  client_id: string;
+  provider: string;
+  name: string;
+  description: string;
+  instructions: string;
+  personality: string;
+  model: string;
+  timezone: string;
+  manual_context: string;
+  temperature: number;
+  max_tokens: number;
+  memory_limit: number;
+  image_enabled: boolean;
+  image_model: string;
+  audio_enabled: boolean;
+  audio_model: string;
+  widget_enabled: boolean;
+  widget_public_id: string;
+  widget_greeting: string;
+  widget_color: string;
+  widget_position: string;
+  is_active: boolean;
+  client: Client;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Provider = {
+  provider: string;
+  label: string;
+  configured: boolean;
+  api_key_masked: string;
+};
+
+export type ProviderTest = { ok: boolean; message: string; models: string[] };
+
+export type KnowledgeDocument = {
+  id: string;
+  filename: string;
+  status: "processed" | "error" | "pending";
+  error_message: string | null;
+  character_count: number;
+  created_at: string;
+};
+
+export type QAPair = { id: string; question: string; answer: string };
+
+export type Source = { id: string; filename: string; excerpt: string };
+export type Message = { id: string; role: "user" | "assistant"; content: string; sources: Source[]; sender_type: "visitor" | "ai" | "human"; sender_name: string | null; created_at: string };
+
+export type ConversationInbox = {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  client_id: string;
+  title: string;
+  contact_name: string | null;
+  channel: string;
+  mode: "ai" | "human";
+  preview: string;
+  unread: boolean;
+  updated_at: string;
+};
+export type Conversation = {
+  id: string;
+  client_id: string;
+  agent_id: string;
+  title: string;
+  mode: "ai" | "human";
+  channel: string;
+  external_chat_id: string | null;
+  contact_name: string | null;
+  created_at: string;
+  updated_at: string;
+  messages?: Message[];
+};
+
+export type WhatsAppChannel = {
+  id: string;
+  client_id: string;
+  agent_id: string;
+  status: "disconnected" | "connecting" | "qr" | "connected" | "reconnecting" | "error";
+  phone_number: string | null;
+  display_name: string | null;
+  qr_code: string | null;
+  last_error: string | null;
+  is_enabled: boolean;
+  has_session: boolean;
+  last_connected_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PortalPublic = {
+  client_name: string;
+  portal_title: string;
+  portal_slug: string;
+  agency_name: string;
+  agency_brand_color: string;
+  agency_logo_url: string | null;
+};
