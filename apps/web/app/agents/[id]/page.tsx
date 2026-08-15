@@ -55,7 +55,7 @@ export default function AgentDetailPage() {
 
   const contextWindow = modelContextWindow(model);
   const promptTokens = useMemo(
-    () => (agent ? estimateTokens([agent.description, agent.instructions, agent.personality, agent.manual_context].join("\n")) : 0),
+    () => (agent ? estimateTokens([agent.description, agent.instructions, agent.personality, agent.brief_summary, agent.brief_products, agent.brief_audience, agent.brief_policies, agent.brief_goal, agent.brief_dos, agent.brief_donts, agent.manual_context].join("\n")) : 0),
     [agent],
   );
   const contextPct = Math.min(100, Math.round((promptTokens / contextWindow) * 100));
@@ -64,7 +64,7 @@ export default function AgentDetailPage() {
   async function saveConfig(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true);
     const form = new FormData(event.currentTarget);
-    const payload = { client_id: form.get("client_id"), name: form.get("name"), description: form.get("description"), instructions: form.get("instructions"), personality: form.get("personality"), provider, model, timezone, temperature, max_tokens: maxTokens, memory_limit: memoryLimit, image_enabled: imageEnabled, image_model: imageModel, audio_enabled: audioEnabled, audio_model: audioModel };
+    const payload = { client_id: form.get("client_id"), name: form.get("name"), description: form.get("description"), instructions: form.get("instructions"), personality: form.get("personality"), brief_summary: form.get("brief_summary"), brief_products: form.get("brief_products"), brief_audience: form.get("brief_audience"), brief_policies: form.get("brief_policies"), brief_goal: form.get("brief_goal"), brief_dos: form.get("brief_dos"), brief_donts: form.get("brief_donts"), provider, model, timezone, temperature, max_tokens: maxTokens, memory_limit: memoryLimit, image_enabled: imageEnabled, image_model: imageModel, audio_enabled: audioEnabled, audio_model: audioModel };
     try { setAgent(await api<Agent>(`/agents/${id}`, { method: "PATCH", body: JSON.stringify(payload) })); toast.success(t("agents.detail.configSaved")); }
     catch (err) { toast.error(messageFrom(err)); } finally { setBusy(false); }
   }
@@ -135,6 +135,19 @@ export default function AgentDetailPage() {
     {tab === "details" && <form className="settings-form" onSubmit={saveConfig}>
       <section className="settings-section"><div className="settings-copy"><h3>{t("agents.detail.generalHeading")}</h3><p>{t("agents.detail.generalCopy")}</p></div><div className="settings-fields"><div className="form-grid"><label>{t("agents.detail.clientLabel")}<select name="client_id" defaultValue={agent.client_id}>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label><label>{t("agents.detail.nameLabel")}<input name="name" required defaultValue={agent.name} /></label></div><label>{t("agents.detail.descriptionLabel")}<textarea name="description" rows={3} defaultValue={agent.description} /></label></div></section>
       <section className="settings-section"><div className="settings-copy"><h3>{t("agents.detail.behaviorHeading")}</h3><p>{t("agents.detail.behaviorCopy")}</p></div><div className="settings-fields"><label>{t("agents.detail.instructionsLabel")}<textarea name="instructions" rows={8} defaultValue={agent.instructions} placeholder={t("agents.detail.instructionsPlaceholder")} /></label><label>{t("agents.detail.personalityLabel")}<textarea name="personality" rows={4} defaultValue={agent.personality} placeholder={t("agents.detail.personalityPlaceholder")} /></label></div></section>
+      <section className="settings-section"><div className="settings-copy"><h3>{t("agents.detail.briefHeading")}</h3><p>{t("agents.detail.briefCopy")}</p></div><div className="settings-fields">
+        <label>{t("agents.detail.briefSummaryLabel")}<textarea name="brief_summary" rows={2} defaultValue={agent.brief_summary} placeholder={t("agents.detail.briefSummaryPlaceholder")} /></label>
+        <div className="form-grid">
+          <label>{t("agents.detail.briefProductsLabel")}<textarea name="brief_products" rows={3} defaultValue={agent.brief_products} placeholder={t("agents.detail.briefProductsPlaceholder")} /></label>
+          <label>{t("agents.detail.briefAudienceLabel")}<textarea name="brief_audience" rows={3} defaultValue={agent.brief_audience} placeholder={t("agents.detail.briefAudiencePlaceholder")} /></label>
+        </div>
+        <label>{t("agents.detail.briefPoliciesLabel")}<textarea name="brief_policies" rows={3} defaultValue={agent.brief_policies} placeholder={t("agents.detail.briefPoliciesPlaceholder")} /></label>
+        <label>{t("agents.detail.briefGoalLabel")}<textarea name="brief_goal" rows={2} defaultValue={agent.brief_goal} placeholder={t("agents.detail.briefGoalPlaceholder")} /></label>
+        <div className="form-grid">
+          <label>{t("agents.detail.briefDosLabel")}<textarea name="brief_dos" rows={3} defaultValue={agent.brief_dos} placeholder={t("agents.detail.briefDosPlaceholder")} /></label>
+          <label>{t("agents.detail.briefDontsLabel")}<textarea name="brief_donts" rows={3} defaultValue={agent.brief_donts} placeholder={t("agents.detail.briefDontsPlaceholder")} /></label>
+        </div>
+      </div></section>
       <section className="settings-section"><div className="settings-copy"><h3>{t("agents.detail.aiModelHeading")}</h3><p>{t("agents.detail.aiModelCopy")}</p></div><div className="settings-fields">
         <label>{t("agents.detail.timezoneLabel")}<Combobox value={timezone} onChange={setTimezone} options={TIMEZONES} placeholder={t("agents.detail.timezoneLabel")} /></label>
         <div className="form-grid"><label>{t("agents.detail.providerLabel")}<select value={provider} onChange={(e) => setProvider(e.target.value)}>{PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label><label>{t("agents.detail.modelLabel")}<Combobox value={model} onChange={setModel} options={modelsFor(provider)} placeholder={t("agents.detail.modelPlaceholder")} allowCustom /></label></div>

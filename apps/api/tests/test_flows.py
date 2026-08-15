@@ -328,6 +328,38 @@ def test_agent_qa_pairs_reach_prompt(authenticated_client: TestClient, monkeypat
     assert client.get(f"/api/agents/{agent['id']}/qa").json() == []
 
 
+def test_agent_brief_persists_and_reaches_prompt(authenticated_client: TestClient, monkeypatch):
+    client = authenticated_client
+    customer = client.post(
+        "/api/clients",
+        json={"name": "Brief Co", "industry": "", "description": "", "general_context": "", "is_active": True},
+    ).json()
+    client.put("/api/providers/openai", json={"api_key": "secret"})
+    agent = client.post(
+        "/api/agents",
+        json={
+            "client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini",
+            "name": "Brief", "brief_summary": "A bakery", "brief_donts": "Never promise same-day delivery",
+            "is_active": True,
+        },
+    ).json()
+    assert agent["brief_summary"] == "A bakery"
+
+    updated = client.patch(f"/api/agents/{agent['id']}", json={"brief_goal": "Take cake orders"}).json()
+    assert updated["brief_goal"] == "Take cake orders"
+    assert updated["brief_summary"] == "A bakery"
+
+    conversation = client.post("/api/conversations", json={"agent_id": agent["id"]}).json()
+    fake_completion = AsyncMock(return_value=ai_service.Completion(text="ok"))
+    monkeypatch.setattr(conversations_router, "chat_completion", fake_completion)
+    client.post(f"/api/conversations/{conversation['id']}/messages", json={"content": "hola"})
+    prompt = fake_completion.await_args.args[4][0]["content"]
+    assert "BRIEF DEL NEGOCIO" in prompt
+    assert "A bakery" in prompt
+    assert "Take cake orders" in prompt
+    assert "Never promise same-day delivery" in prompt
+
+
 def test_media_message_uses_image_capability(authenticated_client: TestClient, monkeypatch):
     client = authenticated_client
     customer = client.post(

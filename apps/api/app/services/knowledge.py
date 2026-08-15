@@ -171,6 +171,21 @@ async def _semantic_search(db: Session, agent: Agent, query: str) -> KnowledgeRe
     return KnowledgeResult(text="\n\n".join(selected), sources=sources)
 
 
+def _business_brief(agent: Agent) -> str:
+    """Compose the filled structured-brief fields into a labelled block."""
+    fields = (
+        ("Qué hace el negocio", agent.brief_summary),
+        ("Productos y servicios", agent.brief_products),
+        ("Público objetivo", agent.brief_audience),
+        ("Información y políticas clave", agent.brief_policies),
+        ("Objetivo principal del agente", agent.brief_goal),
+        ("Debe hacer siempre", agent.brief_dos),
+        ("No debe hacer nunca", agent.brief_donts),
+    )
+    lines = [f"- {label}: {value.strip()}" for label, value in fields if value.strip()]
+    return "\n".join(lines)
+
+
 def build_system_prompt(agent: Agent, knowledge_text: str) -> str:
     client = agent.client
     tz_name = (agent.timezone or "UTC").strip() or "UTC"
@@ -185,6 +200,9 @@ def build_system_prompt(agent: Agent, knowledge_text: str) -> str:
         f"INSTRUCCIONES PRINCIPALES:\n{agent.instructions or 'Responde de forma útil y precisa.'}",
         f"PERSONALIDAD Y TONO:\n{agent.personality or 'Profesional, claro y amable.'}",
     ]
+    brief = _business_brief(agent)
+    if brief:
+        parts.append(f"BRIEF DEL NEGOCIO:\n{brief}")
     if client.general_context.strip():
         parts.append(f"CONTEXTO GENERAL DEL CLIENTE:\n{client.general_context}")
     if agent.manual_context.strip():

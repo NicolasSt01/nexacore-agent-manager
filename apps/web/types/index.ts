@@ -35,6 +35,13 @@ export type Agent = {
   description: string;
   instructions: string;
   personality: string;
+  brief_summary: string;
+  brief_products: string;
+  brief_audience: string;
+  brief_policies: string;
+  brief_goal: string;
+  brief_dos: string;
+  brief_donts: string;
   model: string;
   timezone: string;
   manual_context: string;

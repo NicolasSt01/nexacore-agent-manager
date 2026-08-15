@@ -111,6 +111,13 @@ class AgentBase(BaseModel):
     description: str = ""
     instructions: str = ""
     personality: str = ""
+    brief_summary: str = ""
+    brief_products: str = ""
+    brief_audience: str = ""
+    brief_policies: str = ""
+    brief_goal: str = ""
+    brief_dos: str = ""
+    brief_donts: str = ""
     model: str = ""
     provider: str = Field(default="openai", pattern=r"^(openai|anthropic)$")
     timezone: str = Field(default="UTC", max_length=64)
@@ -138,6 +145,13 @@ class AgentUpdate(BaseModel):
     description: str | None = None
     instructions: str | None = None
     personality: str | None = None
+    brief_summary: str | None = None
+    brief_products: str | None = None
+    brief_audience: str | None = None
+    brief_policies: str | None = None
+    brief_goal: str | None = None
+    brief_dos: str | None = None
+    brief_donts: str | None = None
     model: str | None = None
     provider: str | None = Field(default=None, pattern=r"^(openai|anthropic)$")
     timezone: str | None = Field(default=None, max_length=64)
@@ -163,6 +177,13 @@ class AgentOut(ORMModel):
     description: str
     instructions: str
     personality: str
+    brief_summary: str
+    brief_products: str
+    brief_audience: str
+    brief_policies: str
+    brief_goal: str
+    brief_dos: str
+    brief_donts: str
     model: str
     timezone: str
     manual_context: str

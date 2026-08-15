@@ -105,6 +105,15 @@ class Agent(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     instructions: Mapped[str] = mapped_column(Text, default="")
     personality: Mapped[str] = mapped_column(Text, default="")
+    # Structured business brief. Optional guided fields that compose into the
+    # system prompt alongside the free-form instructions.
+    brief_summary: Mapped[str] = mapped_column(Text, default="", server_default="")
+    brief_products: Mapped[str] = mapped_column(Text, default="", server_default="")
+    brief_audience: Mapped[str] = mapped_column(Text, default="", server_default="")
+    brief_policies: Mapped[str] = mapped_column(Text, default="", server_default="")
+    brief_goal: Mapped[str] = mapped_column(Text, default="", server_default="")
+    brief_dos: Mapped[str] = mapped_column(Text, default="", server_default="")
+    brief_donts: Mapped[str] = mapped_column(Text, default="", server_default="")
     # AI provider ("openai" or "anthropic"); the agency's key for that provider is used.
     provider: Mapped[str] = mapped_column(String(30), default="openai", server_default="openai")
     model: Mapped[str] = mapped_column(String(180), default="")
