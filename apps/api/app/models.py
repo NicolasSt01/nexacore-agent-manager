@@ -15,6 +15,10 @@ def new_public_id() -> str:
     return uuid.uuid4().hex
 
 
+def new_domain_token() -> str:
+    return uuid.uuid4().hex
+
+
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -67,6 +71,11 @@ class Client(Base):
     portal_title: Mapped[str] = mapped_column(String(180), default="")
     portal_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     portal_password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Optional custom domain for this client's portal. Verified via a DNS TXT
+    # challenge; only verified domains are routed and get an on-demand cert.
+    portal_domain: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    portal_domain_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    portal_domain_token: Mapped[str] = mapped_column(String(64), default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 

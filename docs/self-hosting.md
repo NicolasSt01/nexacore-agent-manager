@@ -160,6 +160,54 @@ agency.example.com {
 Keep the database, API and WhatsApp bridge private (`BIND_HOST=127.0.0.1`, the
 default); only your reverse proxy should face the internet.
 
+## Custom domains for client portals
+
+By default a client's portal lives at `your-domain/portal/<slug>`. You can also
+serve it under the **client's own domain** (e.g. `chat.brand.com`) for a fully
+white-label experience. This is opt-in because it requires the gateway to
+terminate TLS and obtain certificates on demand.
+
+**1. Enable the multi-domain gateway.** Create a `docker-compose.override.yml`
+next to `docker-compose.yml` (Compose merges it automatically):
+
+```yaml
+services:
+  proxy:
+    volumes:
+      - ./docker/Caddyfile.ondemand:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data          # persist issued certificates across restarts
+    environment:
+      PRIMARY_DOMAIN: app.youragency.com   # your main domain
+    ports:
+      - "80:80"
+      - "443:443"
+
+volumes:
+  caddy_data:
+```
+
+Point `app.youragency.com` (and every client domain) at this server, then
+`make up`. The gateway obtains a certificate for the primary domain normally, and
+for each client domain **on demand** — but only after asking the API whether that
+domain is a verified portal domain (`/api/public/portal-domain`), so it never
+issues certificates for arbitrary hosts aimed at your IP.
+
+**2. Add the domain for a client.** In the dashboard open the client → **Portal**
+tab → **Custom domain**, enter the domain and save. Create the two DNS records it
+shows:
+
+| Type | Host | Value |
+| --- | --- | --- |
+| `CNAME` | `chat.brand.com` | your gateway host (e.g. `app.youragency.com`) |
+| `TXT` | `_openlivery-challenge.chat.brand.com` | the token shown |
+
+Click **Verify**. Once the TXT record is found the domain is marked verified, the
+gateway starts issuing its certificate, and the frontend routes the domain to
+that client's portal. The portal must be **published** for the domain to serve.
+
+> Without the override the app stays single-origin behind your own reverse proxy,
+> and portals are reachable only at `/portal/<slug>`.
+
 ## Environment variables
 
 `generate-docker-env.sh` fills the secrets. To set values by hand, copy

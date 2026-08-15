@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Bot, Copy, ExternalLink, Globe2, Inbox, LoaderCircle, MessageCircle, Radio, Save, Settings2, Trash2, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bot, Copy, ExternalLink, Globe2, Inbox, LoaderCircle, MessageCircle, Radio, Save, Settings2, ShieldAlert, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { EmptyState, StatusBadge } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { api, messageFrom } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import type { Client, Conversation } from "@/types";
+import type { Client, ClientDomain, Conversation } from "@/types";
 
 type Tab = "details" | "agents" | "channels" | "inbox" | "portal";
 
@@ -59,8 +59,49 @@ export default function ClientDetailPage() {
 
     {tab === "inbox" && <ClientInbox clientId={client.id} />}
 
-    {tab === "portal" && <form className="page-form" onSubmit={savePortal}><section className="form-section"><div className="section-copy"><h2>{t("clients.detail.portalTitle")}</h2><p>{t("clients.detail.portalCopy")}</p></div><div className="form-fields"><label>{t("clients.detail.portalTitleLabel")}<input name="portal_title" defaultValue={client.portal_title} placeholder={t("clients.detail.portalTitlePlaceholder", { name: client.name })} /></label><label>{t("clients.detail.portalUrl")}<div className="slug-input"><span>localhost:3000/portal/</span><input name="portal_slug" defaultValue={client.portal_slug} /></div></label><div className="url-preview"><code>{portalUrl}</code><button type="button" onClick={() => navigator.clipboard.writeText(portalUrl)}><Copy size={15} /> {t("clients.detail.copy")}</button>{client.portal_enabled && <a href={portalUrl} target="_blank"><ExternalLink size={15} /> {t("clients.detail.open")}</a>}</div><div className="form-grid"><label>{t("clients.detail.portalEmail")}<input name="portal_email" type="email" defaultValue={client.portal_email || ""} placeholder={t("clients.detail.portalEmailPlaceholder")} /></label><label>{t("clients.detail.portalPassword")}<input name="portal_password" type="password" autoComplete="new-password" placeholder={client.portal_password_configured ? t("clients.detail.portalPasswordKeep") : t("clients.detail.portalPasswordMin")} /></label></div><label className="switch-row"><span><strong>{t("clients.detail.publishPortal")}</strong><small>{t("clients.detail.publishPortalHint")}</small></span><input name="portal_enabled" type="checkbox" defaultChecked={client.portal_enabled} /></label></div></section><div className="form-footer"><button className="button primary" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />} {t("clients.detail.savePortal")}</button></div></form>}
+    {tab === "portal" && <><form className="page-form" onSubmit={savePortal}><section className="form-section"><div className="section-copy"><h2>{t("clients.detail.portalTitle")}</h2><p>{t("clients.detail.portalCopy")}</p></div><div className="form-fields"><label>{t("clients.detail.portalTitleLabel")}<input name="portal_title" defaultValue={client.portal_title} placeholder={t("clients.detail.portalTitlePlaceholder", { name: client.name })} /></label><label>{t("clients.detail.portalUrl")}<div className="slug-input"><span>localhost:3000/portal/</span><input name="portal_slug" defaultValue={client.portal_slug} /></div></label><div className="url-preview"><code>{portalUrl}</code><button type="button" onClick={() => navigator.clipboard.writeText(portalUrl)}><Copy size={15} /> {t("clients.detail.copy")}</button>{client.portal_enabled && <a href={portalUrl} target="_blank"><ExternalLink size={15} /> {t("clients.detail.open")}</a>}</div><div className="form-grid"><label>{t("clients.detail.portalEmail")}<input name="portal_email" type="email" defaultValue={client.portal_email || ""} placeholder={t("clients.detail.portalEmailPlaceholder")} /></label><label>{t("clients.detail.portalPassword")}<input name="portal_password" type="password" autoComplete="new-password" placeholder={client.portal_password_configured ? t("clients.detail.portalPasswordKeep") : t("clients.detail.portalPasswordMin")} /></label></div><label className="switch-row"><span><strong>{t("clients.detail.publishPortal")}</strong><small>{t("clients.detail.publishPortalHint")}</small></span><input name="portal_enabled" type="checkbox" defaultChecked={client.portal_enabled} /></label></div></section><div className="form-footer"><button className="button primary" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />} {t("clients.detail.savePortal")}</button></div></form><PortalDomain clientId={client.id} /></>}
   </div>;
+}
+
+function PortalDomain({ clientId }: { clientId: string }) {
+  const t = useT();
+  const toast = useToast();
+  const [domain, setDomain] = useState<ClientDomain | null>(null);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api<ClientDomain>(`/clients/${clientId}/domain`).then((d) => { setDomain(d); setInput(d.domain || ""); }); }, [clientId]);
+
+  async function save() {
+    setBusy(true);
+    try { const d = await api<ClientDomain>(`/clients/${clientId}/domain`, { method: "PUT", body: JSON.stringify({ domain: input.trim().toLowerCase() }) }); setDomain(d); toast.success(t("clients.detail.domainSaved")); }
+    catch (err) { toast.error(messageFrom(err)); } finally { setBusy(false); }
+  }
+  async function verify() {
+    setBusy(true);
+    try { const d = await api<ClientDomain>(`/clients/${clientId}/domain/verify`, { method: "POST" }); setDomain(d); toast.success(t("clients.detail.domainVerified")); }
+    catch (err) { toast.error(messageFrom(err)); } finally { setBusy(false); }
+  }
+  async function remove() {
+    setBusy(true);
+    try { const d = await api<ClientDomain>(`/clients/${clientId}/domain`, { method: "DELETE" }); setDomain(d); setInput(""); toast.success(t("clients.detail.domainRemoved")); }
+    catch (err) { toast.error(messageFrom(err)); } finally { setBusy(false); }
+  }
+
+  return <section className="form-section domain-section"><div className="section-copy"><h2>{t("clients.detail.domainTitle")}</h2><p>{t("clients.detail.domainCopy")}</p></div><div className="form-fields">
+    <label>{t("clients.detail.domainLabel")}<div className="domain-input"><Globe2 size={16} /><input value={input} onChange={(e) => setInput(e.target.value)} placeholder="chat.brand.com" /><button type="button" className="button secondary" onClick={save} disabled={busy || !input.trim()}><Save size={15} /> {t("clients.detail.domainSave")}</button></div></label>
+    {domain?.domain && <>
+      <div className={`domain-status ${domain.verified ? "ok" : "pending"}`}>{domain.verified ? <><ShieldCheck size={16} /> {t("clients.detail.domainStatusVerified")}</> : <><ShieldAlert size={16} /> {t("clients.detail.domainStatusPending")}</>}</div>
+      {!domain.verified && <div className="dns-instructions">
+        <p>{t("clients.detail.domainDnsIntro")}</p>
+        <table className="dns-table"><thead><tr><th>{t("clients.detail.domainDnsType")}</th><th>{t("clients.detail.domainDnsHost")}</th><th>{t("clients.detail.domainDnsValue")}</th></tr></thead><tbody>
+          <tr><td>CNAME</td><td><code>{domain.domain}</code></td><td><code>{t("clients.detail.domainCnameTarget")}</code></td></tr>
+          <tr><td>TXT</td><td><code>{domain.txt_host}</code></td><td><code>{domain.txt_value}</code></td></tr>
+        </tbody></table>
+        <div className="domain-actions"><button type="button" className="button primary" onClick={verify} disabled={busy}>{busy ? <LoaderCircle className="spin" size={15} /> : <ShieldCheck size={15} />} {t("clients.detail.domainVerify")}</button></div>
+      </div>}
+      <div className="form-footer"><button type="button" className="button danger" onClick={remove} disabled={busy}><Trash2 size={15} /> {t("clients.detail.domainRemove")}</button></div>
+    </>}
+  </div></section>;
 }
 
 function ClientInbox({ clientId }: { clientId: string }) {

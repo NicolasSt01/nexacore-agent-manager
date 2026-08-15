@@ -68,7 +68,7 @@ Everything is agency-scoped: `Agency → Users, Clients, AIConnections`; `Client
 ### Backend layout
 
 - `app/main.py` — app creation, CORS, router registration
-- `app/routers/` — one file per domain (auth, agency, clients, agents, connections, conversations, dashboard, portal, whatsapp)
+- `app/routers/` — one file per domain (auth, agency, clients, agents, connections, conversations, dashboard, portal, whatsapp); `domains.py` holds the public, unauthenticated `/api/public/portal-domain` used by the frontend `proxy.ts` and the gateway's on-demand-TLS `ask` hook to map a client's custom domain to its portal
 - `app/services/ai.py` — `chat_completion()` calls any OpenAI-compatible endpoint (base_url + model are per-connection config); connection testing lists `{base_url}/models`
 - `app/services/knowledge.py` — PDF text (pypdf on upload) is chunked and embedded; retrieval is semantic (cosine over embeddings stored as JSON) with keyword ranking as a fallback, then assembled into the system prompt
 - `app/security.py` — JWT in httpOnly cookies; AI API keys and WhatsApp session state are encrypted with a key derived from `ENCRYPTION_KEY` before hitting the DB
@@ -88,4 +88,5 @@ The bridge (`apps/whatsapp/src/manager.ts`) holds live Baileys sessions and is s
 - `ENCRYPTION_KEY` must never change after secrets are stored — it decrypts AI API keys and WhatsApp sessions.
 - The app is served single-origin through a Caddy gateway (`docker/Caddyfile`): `/api/*` → backend, everything else → frontend. The browser uses relative `/api` (`lib/api.ts` falls back to `""`), so `NEXT_PUBLIC_API_URL` is empty by default and only set to point the frontend at an API on a separate origin (baked at build time — rebuild the web image to change it).
 - TLS is operator-provided: put your own reverse proxy in front of the gateway port; the stack itself only serves plain HTTP. No bundled TLS/`make deploy`.
+- Custom per-client portal domains are opt-in: mount `docker/Caddyfile.ondemand` (on-demand TLS gated by `/api/public/portal-domain`) via a compose override; `apps/web/proxy.ts` (Next.js 16 renamed `middleware`→`proxy`) rewrites a verified custom host to `/portal/[slug]`. `BACKEND_INTERNAL_URL` lets the web container reach the API server-side.
 - Ports: gateway `WEB_PORT` (default 3000, the app), backend 8000 (OpenAPI docs at `/docs`, exposed locally for tooling), bridge 3101 (not exposed in Docker).

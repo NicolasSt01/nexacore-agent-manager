@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 
 from app.routers import agents as agents_router
+from app.routers import clients as clients_router
 from app.routers import providers as providers_router
 from app.routers import conversations as conversations_router
 from app.routers import whatsapp as whatsapp_router
@@ -358,6 +359,50 @@ def test_agent_brief_persists_and_reaches_prompt(authenticated_client: TestClien
     assert "A bakery" in prompt
     assert "Take cake orders" in prompt
     assert "Never promise same-day delivery" in prompt
+
+
+def test_custom_portal_domain_flow(authenticated_client: TestClient, monkeypatch):
+    client = authenticated_client
+    customer = client.post(
+        "/api/clients",
+        json={"name": "Brand", "industry": "", "description": "", "general_context": "", "is_active": True},
+    ).json()
+    client.patch(
+        f"/api/clients/{customer['id']}/portal",
+        json={"portal_enabled": True, "portal_email": "owner@brand.com", "portal_password": "portal-password"},
+    )
+
+    body = client.put(f"/api/clients/{customer['id']}/domain", json={"domain": "Chat.Brand.com"}).json()
+    assert body["domain"] == "chat.brand.com"
+    assert body["verified"] is False
+    assert body["txt_host"] == "_openlivery-challenge.chat.brand.com"
+    token = body["txt_value"]
+    assert token
+
+    # Unverified domains are not routable.
+    assert client.get("/api/public/portal-domain?domain=chat.brand.com").status_code == 404
+
+    monkeypatch.setattr(
+        clients_router.dns_service, "txt_contains",
+        lambda domain, tok: domain == "chat.brand.com" and tok == token,
+    )
+    verify = client.post(f"/api/clients/{customer['id']}/domain/verify")
+    assert verify.status_code == 200
+    assert verify.json()["verified"] is True
+
+    resolved = client.get("/api/public/portal-domain?domain=chat.brand.com")
+    assert resolved.status_code == 200
+    assert resolved.json()["portal_slug"] == customer["portal_slug"]
+
+    # The same domain cannot be claimed by another client.
+    other = client.post(
+        "/api/clients",
+        json={"name": "Other", "industry": "", "description": "", "general_context": "", "is_active": True},
+    ).json()
+    assert client.put(f"/api/clients/{other['id']}/domain", json={"domain": "chat.brand.com"}).status_code == 409
+
+    assert client.delete(f"/api/clients/{customer['id']}/domain").json()["domain"] is None
+    assert client.get("/api/public/portal-domain?domain=chat.brand.com").status_code == 404
 
 
 def test_media_message_uses_image_capability(authenticated_client: TestClient, monkeypatch):

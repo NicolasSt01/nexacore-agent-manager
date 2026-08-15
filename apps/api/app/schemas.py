@@ -89,9 +89,29 @@ class ClientOut(ORMModel):
     portal_title: str
     portal_email: EmailStr | None
     portal_password_configured: bool
+    portal_domain: str | None
+    portal_domain_verified: bool
     created_at: datetime
     updated_at: datetime
     agents: list[AgentSummary] = []
+
+
+class ClientDomainSet(BaseModel):
+    # A DNS hostname, e.g. "chat.brand.com". Lowercased and validated as a host.
+    # No look-around: pydantic v2's regex engine does not support it.
+    domain: str = Field(
+        min_length=3,
+        max_length=255,
+        pattern=r"^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$",
+    )
+
+
+class ClientDomainOut(BaseModel):
+    domain: str | None
+    verified: bool
+    # DNS records the operator/client must create.
+    txt_host: str | None
+    txt_value: str | None
 
 
 class ProviderKeyUpdate(BaseModel):

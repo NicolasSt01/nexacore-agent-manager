@@ -39,7 +39,7 @@ keys and self-host the whole thing with one command.
 
 **Operations**
 - ✅ Unified **Inbox** with server-side search, filter tabs (all / unread / human / AI), unread tracking, pagination and human takeover
-- ✅ Per-client **portal** with its own login and Inbox
+- ✅ Per-client **portal** with its own login and Inbox, optionally served under the client's **own custom domain** (DNS-verified, automatic HTTPS)
 - ✅ **Dashboard** with activity, top agents, token usage by model and a date-range filter
 - ✅ Agency **white-label** (name, identifier, color, logo) and toast notifications
 

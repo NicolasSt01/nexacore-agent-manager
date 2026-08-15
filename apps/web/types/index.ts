@@ -22,9 +22,18 @@ export type Client = {
   portal_title: string;
   portal_email: string | null;
   portal_password_configured: boolean;
+  portal_domain: string | null;
+  portal_domain_verified: boolean;
   agents: AgentSummary[];
   created_at: string;
   updated_at: string;
+};
+
+export type ClientDomain = {
+  domain: string | null;
+  verified: boolean;
+  txt_host: string | null;
+  txt_value: string | null;
 };
 
 export type Agent = {
