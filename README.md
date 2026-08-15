@@ -54,7 +54,9 @@ Three services plus PostgreSQL, orchestrated by Docker Compose:
 | `apps/whatsapp` | Node.js · Baileys | WhatsApp Web bridge (stateful sessions) |
 
 All data lives in PostgreSQL; provider keys and WhatsApp sessions are encrypted
-at rest. Every query is scoped by `agency_id` for tenant isolation.
+at rest. Every query is scoped by `agency_id` for tenant isolation, and public
+endpoints (sign-in and the web widget) are rate-limited per client IP. A Caddy
+gateway serves the app and API from a single origin (`/api/*` → backend).
 
 ## Quick start
 
