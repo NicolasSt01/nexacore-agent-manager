@@ -15,7 +15,7 @@ export API_PORT WEB_PORT DB_PORT BIND_HOST
 COMPOSE := docker compose --env-file .env.docker
 
 .DEFAULT_GOAL := help
-.PHONY: help env up down stop start restart build logs ps migrate test shell-api shell-db destroy
+.PHONY: help env up pull down stop start restart build logs ps migrate test shell-api shell-db destroy
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-11s\033[0m %s\n", $$1, $$2}'
@@ -28,6 +28,12 @@ up: env ## Build and start the whole stack (detached)
 	@echo ""
 	@echo "  App:  http://localhost:$(WEB_PORT)"
 	@echo "  API docs (local): http://localhost:$(API_PORT)/docs"
+
+pull: env ## Start from prebuilt images (docker compose pull, no local build)
+	$(COMPOSE) pull
+	$(COMPOSE) up -d
+	@echo ""
+	@echo "  App:  http://localhost:$(WEB_PORT)"
 
 down: ## Stop and remove containers (keeps data volumes)
 	$(COMPOSE) down

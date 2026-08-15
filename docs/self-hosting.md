@@ -63,19 +63,33 @@ cd openlivery
 make up                            # build, start, run migrations
 ```
 
-`make up` builds the images, starts the four containers, creates the database
-and applies the Alembic migrations. All four should report `healthy`:
+`make up` builds the images, starts the containers, creates the database and
+applies the Alembic migrations. Every service should report `healthy`:
 
 ```bash
 make ps
 ```
 
-Override host ports inline when they clash with other services (this keeps the
-browser's API URL in sync automatically):
+Override host ports inline when they clash with other services:
 
 ```bash
 API_PORT=8001 WEB_PORT=3001 DB_PORT=5433 make up
 ```
+
+### Run from prebuilt images (no local build)
+
+Tagged images are published to the GitHub Container Registry on every push to
+`main`, so a server can skip building and pull them instead:
+
+```bash
+make pull        # docker compose pull + up -d
+```
+
+This pulls `ghcr.io/cfgv/openlivery-{api,web,whatsapp}:latest`. Pin a release
+with `OPENLIVERY_VERSION=v1.2.3 make pull`, or point at your own registry with
+`OPENLIVERY_IMAGE_PREFIX`. The prebuilt `web` image calls the API through the
+gateway with relative `/api`; to target an API on a separate origin you must
+build the frontend yourself with `NEXT_PUBLIC_API_URL` set.
 
 ## Access your install
 

@@ -70,6 +70,8 @@ make up                            # build, start, migrate
 Then open **http://localhost:3000** (API docs at **http://localhost:8000/docs**).
 Ports clashing? `API_PORT=8001 WEB_PORT=3001 DB_PORT=5433 make up`.
 
+Prefer not to build? `make pull` runs the prebuilt images published to GHCR.
+
 **Deploy to a public server:** the app and API are served from one origin, so
 run `make up` and put your own reverse proxy (Caddy, nginx, Traefik…) in front of
 the gateway port for TLS, then set `COOKIE_SECURE=true`.

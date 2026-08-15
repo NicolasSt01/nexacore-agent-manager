@@ -23,7 +23,7 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
-    image: openlivery/api:latest
+    image: ${OPENLIVERY_IMAGE_PREFIX:-ghcr.io/cfgv/openlivery}-api:${OPENLIVERY_VERSION:-latest}
     container_name: openlivery_api
     env_file:
       - .env.docker
@@ -54,7 +54,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
-    image: openlivery/web:latest
+    image: ${OPENLIVERY_IMAGE_PREFIX:-ghcr.io/cfgv/openlivery}-web:${OPENLIVERY_VERSION:-latest}
     container_name: openlivery_web
     depends_on:
       api:
@@ -71,7 +71,7 @@ services:
     build:
       context: ./apps/whatsapp
       dockerfile: Dockerfile
-    image: openlivery/whatsapp:latest
+    image: ${OPENLIVERY_IMAGE_PREFIX:-ghcr.io/cfgv/openlivery}-whatsapp:${OPENLIVERY_VERSION:-latest}
     container_name: openlivery_whatsapp
     env_file:
       - .env.docker
