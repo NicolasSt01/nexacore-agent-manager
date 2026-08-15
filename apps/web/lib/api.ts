@@ -1,4 +1,8 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Empty means same-origin: the app and the API are served from one domain
+// through the gateway, so requests use a relative "/api/..." path. Set
+// NEXT_PUBLIC_API_URL only when the API lives on a different origin (e.g. running
+// the frontend on its own during local development).
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export class ApiError extends Error {
   status: number;

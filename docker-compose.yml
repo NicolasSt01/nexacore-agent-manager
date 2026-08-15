@@ -53,13 +53,9 @@ services:
       context: ./apps/web
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
     image: openlivery/web:latest
     container_name: openlivery_web
-    environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-    ports:
-      - "${BIND_HOST:-127.0.0.1}:${WEB_PORT:-3000}:3000"
     depends_on:
       api:
         condition: service_healthy
@@ -94,6 +90,21 @@ services:
       timeout: 5s
       retries: 12
       start_period: 15s
+    restart: unless-stopped
+
+  # Single-origin gateway: the app is served here; "/api/*" goes to the backend
+  # and everything else to the frontend. Put your own reverse proxy in front of
+  # this port for TLS in production.
+  proxy:
+    image: caddy:2-alpine
+    container_name: openlivery_proxy
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${WEB_PORT:-3000}:80"
+    depends_on:
+      - web
+      - api
     restart: unless-stopped
 
 volumes:

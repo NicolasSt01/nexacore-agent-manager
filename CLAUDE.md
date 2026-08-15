@@ -85,5 +85,6 @@ The bridge (`apps/whatsapp/src/manager.ts`) holds live Baileys sessions and is s
 ## Environment gotchas
 
 - `ENCRYPTION_KEY` must never change after secrets are stored — it decrypts AI API keys and WhatsApp sessions.
-- `NEXT_PUBLIC_API_URL` is baked into the frontend at build time; changing it requires rebuilding the frontend container.
-- Ports: frontend 3000, backend 8000 (OpenAPI docs at `/docs`), bridge 3101 (internal-only in Docker).
+- The app is served single-origin through a Caddy gateway (`docker/Caddyfile`): `/api/*` → backend, everything else → frontend. The browser uses relative `/api` (`lib/api.ts` falls back to `""`), so `NEXT_PUBLIC_API_URL` is empty by default and only set to point the frontend at an API on a separate origin (baked at build time — rebuild the web image to change it).
+- TLS is operator-provided: put your own reverse proxy in front of the gateway port; the stack itself only serves plain HTTP. No bundled TLS/`make deploy`.
+- Ports: gateway `WEB_PORT` (default 3000, the app), backend 8000 (OpenAPI docs at `/docs`, exposed locally for tooling), bridge 3101 (not exposed in Docker).

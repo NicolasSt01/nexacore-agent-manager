@@ -10,14 +10,12 @@ API_PORT  ?= 8000
 WEB_PORT  ?= 3000
 DB_PORT   ?= 5432
 BIND_HOST ?= 127.0.0.1
-# Keep the browser's API URL in sync with API_PORT unless set explicitly.
-NEXT_PUBLIC_API_URL ?= http://localhost:$(API_PORT)
-export API_PORT WEB_PORT DB_PORT BIND_HOST NEXT_PUBLIC_API_URL
+export API_PORT WEB_PORT DB_PORT BIND_HOST
 
 COMPOSE := docker compose --env-file .env.docker
 
 .DEFAULT_GOAL := help
-.PHONY: help env up deploy down stop start restart build logs ps migrate test shell-api shell-db destroy
+.PHONY: help env up down stop start restart build logs ps migrate test shell-api shell-db destroy
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-11s\033[0m %s\n", $$1, $$2}'
@@ -29,13 +27,7 @@ up: env ## Build and start the whole stack (detached)
 	$(COMPOSE) up --build -d
 	@echo ""
 	@echo "  App:  http://localhost:$(WEB_PORT)"
-	@echo "  API:  http://localhost:$(API_PORT)/docs"
-
-deploy: env ## Build and start with the Caddy HTTPS reverse proxy (set DOMAIN in .env.docker)
-	@grep -q '^DOMAIN=..*' .env.docker || { echo "Set DOMAIN=your.domain in .env.docker first."; exit 1; }
-	$(COMPOSE) -f docker-compose.yml -f docker-compose.prod.yml up --build -d
-	@echo ""
-	@echo "  Serving https://$$(grep '^DOMAIN=' .env.docker | cut -d= -f2) once DNS points here and ports 80/443 are open."
+	@echo "  API docs (local): http://localhost:$(API_PORT)/docs"
 
 down: ## Stop and remove containers (keeps data volumes)
 	$(COMPOSE) down

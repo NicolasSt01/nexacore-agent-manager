@@ -3,17 +3,22 @@
 Run and operate your own OpenLivery instance. For a feature overview see the
 [README](../README.md).
 
-OpenLivery is four services orchestrated by Docker Compose, with a `Makefile`
-wrapping the common commands:
+OpenLivery is orchestrated by Docker Compose, with a `Makefile` wrapping the
+common commands. A lightweight **gateway** (Caddy) is the single public entry
+point: it serves the app and routes `/api/*` to the backend, so the frontend and
+API share one origin.
 
 | Service | Image | Role |
 | --- | --- | --- |
-| `db` | PostgreSQL | All data (encrypted secrets at rest). |
-| `api` | FastAPI | REST API, models, AI/knowledge/provider services. |
-| `web` | Next.js | Agency dashboard, client portal, playground, widget. |
-| `whatsapp` | Node.js + Baileys | WhatsApp Web bridge (internal only). |
+| `proxy` | Caddy | HTTP gateway — the app's single origin (routes `/api/*` → backend). |
+| `web` | Next.js | Agency dashboard, client portal, playground, widget (internal). |
+| `api` | FastAPI | REST API, models, AI/knowledge/provider services (internal). |
+| `db` | PostgreSQL | All data (encrypted secrets at rest, internal). |
+| `whatsapp` | Node.js + Baileys | WhatsApp Web bridge (internal). |
 
-One instance = **one agency** (the first registered user is its admin).
+Only the gateway is meant to be public. For HTTPS, put your own reverse proxy in
+front of it (see [Go to production](#go-to-production-https)). One instance =
+**one agency** (the first registered user is its admin).
 
 ## Contents
 
@@ -74,13 +79,13 @@ API_PORT=8001 WEB_PORT=3001 DB_PORT=5433 make up
 
 ## Access your install
 
-- **App / dashboard** — http://localhost:3000
-- **API docs** — http://localhost:8000/docs
+- **App / dashboard** — http://localhost:3000 (the gateway)
+- **API docs** — http://localhost:8000/docs (the API is exposed locally for tooling)
 - **PostgreSQL** — `make shell-db` (or connect to `localhost:5432`)
 
-On the first screen choose **Create agency**; that account is the admin. The
-WhatsApp bridge port is never published on the host — only the backend reaches
-it over the private Compose network.
+On the first screen choose **Create agency**; that account is the admin. Only the
+gateway is meant to be reachable publicly; the web, API, database and WhatsApp
+bridge stay on the private Compose network.
 
 ## Secure your install
 
@@ -104,34 +109,28 @@ Do this before exposing OpenLivery to anyone else.
 
 ## Go to production (HTTPS)
 
-The stack includes an optional **Caddy** reverse proxy that obtains and renews
-HTTPS certificates automatically and serves the whole app from a single domain
-(frontend and API share one origin, so the session cookie works with no extra
-config).
+The stack serves plain HTTP on the gateway. For a public deployment, put **your
+own reverse proxy** (Caddy, nginx, Traefik, a cloud load balancer…) in front of
+the gateway to terminate TLS with your domain — the usual self-hosting model.
 
-1. Point your domain's DNS (an `A` record) at the server's IP and open ports
-   **80** and **443**.
-2. Set the domain in `.env.docker`:
+1. Run the stack; the gateway listens on `${WEB_PORT}` (default `3000`), bound to
+   `127.0.0.1`.
+2. Point your reverse proxy at `127.0.0.1:${WEB_PORT}` and serve your domain over
+   HTTPS. Because the app and API share one origin, proxy the **whole domain** to
+   that single port — there is nothing else to route.
+3. Set `COOKIE_SECURE=true` in `.env.docker` and restart, so the session cookie
+   is only sent over TLS.
 
-   ```bash
-   DOMAIN=agency.example.com
-   ```
+Example with Caddy (automatic HTTPS) running on the host:
 
-3. Deploy:
+```caddyfile
+agency.example.com {
+	reverse_proxy 127.0.0.1:3000
+}
+```
 
-   ```bash
-   make deploy
-   ```
-
-Caddy issues the certificate on the first request and routes `/api/*` to the
-backend and everything else to the frontend. `FRONTEND_URL`, `NEXT_PUBLIC_API_URL`
-and `COOKIE_SECURE=true` are configured for the domain automatically.
-
-`make deploy` is `docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d`.
-To use your own proxy instead, skip the overlay and set `FRONTEND_URL`,
-`NEXT_PUBLIC_API_URL` and `COOKIE_SECURE` yourself. If the frontend and API end
-up on **different registrable domains**, also set `COOKIE_SAMESITE=none` (which
-requires `COOKIE_SECURE=true`).
+Keep the database, API and WhatsApp bridge private (`BIND_HOST=127.0.0.1`, the
+default); only your reverse proxy should face the internet.
 
 ## Environment variables
 
@@ -145,11 +144,10 @@ requires `COOKIE_SECURE=true`).
 | `SECRET_KEY` | Backend | Signs the agency and portal sessions. |
 | `ENCRYPTION_KEY` | Backend / persisted data | Encrypts API keys, QR and the WhatsApp session. **Must not change** after secrets are stored. |
 | `WHATSAPP_BRIDGE_TOKEN` | Backend + bridge | Authenticates the private backend↔bridge calls. |
-| `FRONTEND_URL` | Backend | Origin allowed by CORS. |
-| `NEXT_PUBLIC_API_URL` | Browser / frontend build | Address the browser uses to reach the API (baked at build time). |
+| `FRONTEND_URL` | Backend | Origin allowed by CORS (only needed if you serve the API on a separate origin). |
+| `NEXT_PUBLIC_API_URL` | Browser / frontend build | Leave empty (default): the browser calls the API through the gateway with relative `/api`. Set it only to point the frontend at an API on a separate origin (baked at build time). |
 | `COOKIE_SECURE` | Backend | `true` behind HTTPS so the session cookie is only sent over TLS. |
 | `COOKIE_SAMESITE` | Backend | `lax` (default); `none` when the frontend and API are on different sites (requires `COOKIE_SECURE=true`). |
-| `DOMAIN` | Reverse proxy | Public domain for `make deploy`. |
 | `ACCESS_TOKEN_MINUTES` | Backend | Session lifetime. |
 | `WHATSAPP_LOG_LEVEL` | Bridge | Log level; `silent` avoids exposing sensitive data. |
 | `API_PORT`, `WEB_PORT`, `DB_PORT` | Host | Host ports (defaults `8000` / `3000` / `5432`). |
@@ -197,7 +195,7 @@ docker compose --env-file .env.docker start api whatsapp
 
 ```bash
 git pull
-make up        # or `make deploy` for the HTTPS production setup
+make up        # rebuilds and restarts; your reverse proxy stays in front
 ```
 
 New images are built and the backend runs `alembic upgrade head` on start, so

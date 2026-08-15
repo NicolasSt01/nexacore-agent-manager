@@ -1,6 +1,7 @@
-# Public entry point. Caddy terminates HTTPS (automatic certificates) and routes
-# API traffic to the backend and everything else to the frontend, on one domain.
-{$DOMAIN} {
+# Internal HTTP gateway: one origin for the whole app. "/api/*" is routed to the
+# backend and everything else to the frontend. TLS is handled by the operator's
+# own reverse proxy placed in front of this service in production.
+:80 {
 	handle /api/* {
 		reverse_proxy api:8000
 	}

@@ -8,7 +8,9 @@ FROM node:22.18.0-bookworm-slim AS builder
 
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+# Empty by default: the app calls the API same-origin ("/api/...") through the
+# gateway. Set this only to point at a different API origin.
+ARG NEXT_PUBLIC_API_URL=
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 COPY --from=dependencies /app/node_modules ./node_modules

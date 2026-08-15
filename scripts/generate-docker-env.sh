@@ -26,9 +26,10 @@ bridge_token=$(openssl rand -hex 32)
   echo "WHATSAPP_BRIDGE_TOKEN=$bridge_token"
   echo
   echo "FRONTEND_URL=http://localhost:3000"
-  echo "NEXT_PUBLIC_API_URL=http://localhost:8000"
   echo "ACCESS_TOKEN_MINUTES=10080"
   echo "WHATSAPP_LOG_LEVEL=silent"
+  echo "COOKIE_SECURE=false"
+  echo "COOKIE_SAMESITE=lax"
   echo
   echo "# Host ports. Change any that clash with other local services."
   echo "API_PORT=8000"
