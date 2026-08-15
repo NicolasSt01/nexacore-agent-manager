@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # behind HTTPS in production.
     cookie_secure: bool = False
     cookie_samesite: str = "lax"
+    # Rate limiting on public/unauthenticated endpoints (per client IP). Disable
+    # only for tests or when a proxy in front already enforces limits.
+    rate_limit_enabled: bool = True
     storage_dir: Path = APP_DIR / "storage"
     backend_url: str = "http://localhost:8000"
     whatsapp_bridge_url: str = "http://localhost:3101"

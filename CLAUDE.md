@@ -72,6 +72,7 @@ Everything is agency-scoped: `Agency → Users, Clients, AIConnections`; `Client
 - `app/services/ai.py` — `chat_completion()` calls any OpenAI-compatible endpoint (base_url + model are per-connection config); connection testing lists `{base_url}/models`
 - `app/services/knowledge.py` — PDF text (pypdf on upload) is chunked and embedded; retrieval is semantic (cosine over embeddings stored as JSON) with keyword ranking as a fallback, then assembled into the system prompt
 - `app/security.py` — JWT in httpOnly cookies; AI API keys and WhatsApp session state are encrypted with a key derived from `ENCRYPTION_KEY` before hitting the DB
+- `app/ratelimit.py` — per-IP in-memory limiter used as a route dependency on public/unauthenticated endpoints (auth + portal login, widget messages); reads the client from `X-Forwarded-For` (set by the gateway); toggle with `RATE_LIMIT_ENABLED` (disabled in tests)
 - `migrations/` — Alembic; schema changes require a new migration, and Docker runs `alembic upgrade head` on backend start
 
 ### WhatsApp flow

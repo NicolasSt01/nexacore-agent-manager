@@ -6,6 +6,7 @@ from ..config import get_settings
 from ..database import get_db
 from ..deps import get_current_user
 from ..models import Agency, User
+from ..ratelimit import login_rate_limit
 from ..schemas import LoginRequest, RegisterRequest, UserOut
 from ..security import create_access_token, hash_password, verify_password
 from ..slugs import unique_slug
@@ -27,7 +28,12 @@ def _set_session_cookie(response: Response, user: User) -> None:
     )
 
 
-@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=UserOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(login_rate_limit)],
+)
 def register(payload: RegisterRequest, response: Response, db: Session = Depends(get_db)):
     email = payload.email.lower()
     if db.scalar(select(User).where(User.email == email)):
@@ -47,7 +53,7 @@ def register(payload: RegisterRequest, response: Response, db: Session = Depends
     return user
 
 
-@router.post("/login", response_model=UserOut)
+@router.post("/login", response_model=UserOut, dependencies=[Depends(login_rate_limit)])
 def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == payload.email.lower()))
     if not user or not verify_password(payload.password, user.password_hash):

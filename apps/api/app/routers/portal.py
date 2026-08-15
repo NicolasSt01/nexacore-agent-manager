@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from ..config import get_settings
 from ..database import get_db
 from ..models import Agency, Agent, Client, Conversation, Message, now_utc
+from ..ratelimit import login_rate_limit
 from ..schemas import (
     AgentSummary,
     ConversationDetail,
@@ -86,7 +87,7 @@ def public_logo(slug: str, db: Session = Depends(get_db)):
     return Response(content=agency.logo_data, media_type=agency.logo_mime, headers={"Cache-Control": "no-store"})
 
 
-@router.post("/{slug}/login", response_model=PortalSessionOut)
+@router.post("/{slug}/login", response_model=PortalSessionOut, dependencies=[Depends(login_rate_limit)])
 def portal_login(slug: str, payload: PortalLoginRequest, response: Response, db: Session = Depends(get_db)):
     client = _public_client(db, slug)
     if (

@@ -20,6 +20,14 @@ Only the gateway is meant to be public. For HTTPS, put your own reverse proxy in
 front of it (see [Go to production](#go-to-production-https)). One instance =
 **one agency** (the first registered user is its admin).
 
+> **Why Caddy for the gateway?** The routing is deliberately simple — two
+> upstreams and one rule (`/api/*` → backend, everything else → frontend) — and
+> authentication lives in the API (JWT in an httpOnly cookie), not at the edge. A
+> single small binary with a tiny config fits that; heavier programmable gateways
+> (Envoy, Kong) earn their keep with many services and edge auth/key validation,
+> which this stack does not need. The gateway is isolated to the `proxy` service,
+> so swapping it later touches nothing else.
+
 ## Contents
 
 - [Before you begin](#before-you-begin)
@@ -120,6 +128,12 @@ Do this before exposing OpenLivery to anyone else.
 - Provider API keys are encrypted at rest and never returned in full to the
   browser; the WhatsApp auth state and QR are encrypted too. `WHATSAPP_BRIDGE_TOKEN`
   authenticates the backend↔bridge calls — do not reuse it as a password or key.
+- **Rate limiting.** Public, unauthenticated endpoints are throttled per client
+  IP: sign-in and sign-up (agency and portal) to blunt brute force, and the web
+  widget's message endpoint because each call spends LLM tokens. Limits are
+  in-memory (fine for one instance); set `RATE_LIMIT_ENABLED=false` if a proxy in
+  front already enforces limits, or add proxy-level limits for a scaled setup. The
+  limiter reads the client from `X-Forwarded-For`, which the gateway sets.
 
 ## Go to production (HTTPS)
 

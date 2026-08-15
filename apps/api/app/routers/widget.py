@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
 from ..models import Agency, Agent, Conversation, Message, now_utc
+from ..ratelimit import widget_rate_limit
 from ..schemas import WidgetConfigOut, WidgetMessageIn, WidgetReply
 from ..services.ai import chat_completion
 from ..services.knowledge import build_system_prompt, retrieve_knowledge
@@ -89,7 +90,7 @@ def widget_history(public_id: str, session_id: str, db: Session = Depends(get_db
     }
 
 
-@router.post("/{public_id}/messages", response_model=WidgetReply)
+@router.post("/{public_id}/messages", response_model=WidgetReply, dependencies=[Depends(widget_rate_limit)])
 async def widget_message(public_id: str, payload: WidgetMessageIn, db: Session = Depends(get_db)):
     agent = _agent(db, public_id)
     conversation = _conversation(db, agent, payload.session_id)
