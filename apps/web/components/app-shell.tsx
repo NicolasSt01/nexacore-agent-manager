@@ -19,6 +19,13 @@ const navigation: { href: string; labelKey: I18nKey; icon: typeof LayoutDashboar
   { href: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
+// Extra path prefixes served without a session (comma-separated, baked at
+// build). Lets a deployment add public pages without patching the shell.
+const EXTRA_PUBLIC_PATHS = (process.env.NEXT_PUBLIC_PUBLIC_PATHS || "")
+  .split(",")
+  .map((path) => path.trim())
+  .filter(Boolean);
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -29,7 +36,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isLogin = pathname === "/login";
   const isPortal = pathname.startsWith("/portal/");
   const isWidget = pathname.startsWith("/widget/");
-  const isBare = isLogin || isPortal || isWidget;
+  const isExtraPublic = EXTRA_PUBLIC_PATHS.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
+  const isBare = isLogin || isPortal || isWidget || isExtraPublic;
 
   useEffect(() => {
     if (isBare) { setLoading(false); return; }
