@@ -9,6 +9,40 @@ and are released together.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-20
+
+Upgrading: this release adds a database migration (applied automatically by the
+Docker stack; run `alembic upgrade head` on local setups) and a new backend
+dependency (`pip install -r requirements.txt`).
+
+### Added
+
+- Custom tools for agents, configured from a new Tools tab on the agent page:
+  - HTTP tools: user-defined endpoint with `{param}` path placeholders, method,
+    body and query parameters, prompt instructions, optional auth headers
+    (encrypted at rest) and timeout.
+  - MCP servers: external servers over SSE or Streamable HTTP with optional
+    auth headers. The connection must be tested (tools listed) before saving,
+    and the discovered tool list is cached so chat requests never block on
+    discovery.
+- Tool-calling loop for both providers (OpenAI Responses API and Anthropic
+  Messages API), capped per reply, with token usage summed across iterations.
+  Agents without tools are unaffected.
+- Tool usage recorded on each assistant reply and shown in the playground,
+  including the error detail when a call fails. When a tool fails, the agent
+  reports the information as unavailable instead of answering from memory.
+- SSRF guard for HTTP tools: URLs resolving to private, loopback or reserved
+  addresses are rejected and redirects are never followed. Self-hosted
+  deployments can opt out with `TOOLS_ALLOW_PRIVATE_URLS`.
+- Unread count and last-message preview on inbox conversations.
+- Channel badge on inbox conversations.
+- Extra sidebar links via `NEXT_PUBLIC_EXTRA_NAV`.
+- The API client follows an `X-Redirect-To` response header.
+
+### Fixed
+
+- Spacing of stacked provider cards in settings.
+
 ### Documentation
 
 - Full documentation site at [openlivery.com/docs](https://openlivery.com/docs) with per-feature guides in English and Spanish.
@@ -50,5 +84,6 @@ First tagged release.
 - Custom per-client portal domains with on-demand TLS.
 - README and self-hosting guide.
 
-[Unreleased]: https://github.com/sarrazola/openlivery/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sarrazola/openlivery/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sarrazola/openlivery/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sarrazola/openlivery/releases/tag/v0.1.0
