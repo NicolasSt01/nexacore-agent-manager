@@ -56,6 +56,11 @@ Full documentation lives at **[openlivery.com/docs](https://openlivery.com/docs)
 - ✅ Bring-your-own **OpenAI** (Responses API) and **Anthropic** (Messages API) keys — agency-level, encrypted, and validated when saved
 - ✅ Any OpenAI-compatible endpoint via per-connection base URL + model
 
+**Custom tools** — [docs](https://openlivery.com/docs/custom-tools)
+- ✅ Per-agent **HTTP tools**: any REST endpoint with path/query/body parameters, encrypted auth headers and an SSRF guard
+- ✅ **MCP servers** (Streamable HTTP or SSE) with test-before-save connection checks and cached tool discovery
+- ✅ Tool usage recorded per reply and surfaced in the playground, including failure details
+
 **Channels** — [WhatsApp](https://openlivery.com/docs/whatsapp) · [Web widget](https://openlivery.com/docs/web-widget)
 - ✅ **WhatsApp** through Baileys — QR link, per-client number, encrypted persistent session
 - ✅ Embeddable **web chat widget** for any website
