@@ -3,18 +3,19 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, AudioLines, Bot, CheckCircle2, Code, Copy, ExternalLink, FileText, ImageIcon, LoaderCircle, MessageSquareText, Plus, Power, PowerOff, Save, Settings2, Sparkles, Trash2, UploadCloud, XCircle } from "lucide-react";
+import { ArrowLeft, AudioLines, Bot, CheckCircle2, Code, Copy, ExternalLink, FileText, ImageIcon, LoaderCircle, MessageSquareText, Plus, Power, PowerOff, Save, Settings2, Sparkles, Trash2, UploadCloud, Wrench, XCircle } from "lucide-react";
 import { api, messageFrom } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { Alert } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { ChatPlayground } from "@/components/chat-playground";
+import { AgentToolsTab } from "@/components/agent-tools/agent-tools-tab";
 import { Combobox } from "@/components/combobox";
 import { PROVIDERS, modelsFor, estimateTokens, modelContextWindow, AUDIO_MODELS, IMAGE_MODELS } from "@/lib/providers";
 import { TIMEZONES } from "@/lib/timezones";
-import type { Agent, Client, KnowledgeDocument, QAPair } from "@/types";
+import type { Agent, AgentTool, Client, KnowledgeDocument, QAPair } from "@/types";
 
-type Tab = "details" | "knowledge" | "widget" | "playground";
+type Tab = "details" | "knowledge" | "tools" | "widget" | "playground";
 
 export default function AgentDetailPage() {
   const t = useT();
@@ -38,13 +39,14 @@ export default function AgentDetailPage() {
   const [widgetPosition, setWidgetPosition] = useState("right");
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [qaPairs, setQaPairs] = useState<QAPair[]>([]);
+  const [tools, setTools] = useState<AgentTool[]>([]);
   const [tab, setTab] = useState<Tab>("details");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
-    const [a, c, d, q] = await Promise.all([api<Agent>(`/agents/${id}`), api<Client[]>("/clients"), api<KnowledgeDocument[]>(`/agents/${id}/documents`), api<QAPair[]>(`/agents/${id}/qa`)]);
-    setAgent(a); setClients(c); setDocuments(d); setQaPairs(q);
+    const [a, c, d, q, tl] = await Promise.all([api<Agent>(`/agents/${id}`), api<Client[]>("/clients"), api<KnowledgeDocument[]>(`/agents/${id}/documents`), api<QAPair[]>(`/agents/${id}/qa`), api<AgentTool[]>(`/agents/${id}/tools`)]);
+    setAgent(a); setClients(c); setDocuments(d); setQaPairs(q); setTools(tl);
     setProvider(a.provider); setModel(a.model); setTimezone(a.timezone || "UTC");
     setTemperature(a.temperature); setMaxTokens(a.max_tokens); setMemoryLimit(a.memory_limit);
     setImageEnabled(a.image_enabled); setImageModel(a.image_model || "gpt-4.1");
@@ -130,7 +132,7 @@ export default function AgentDetailPage() {
   return <div className="page agent-detail-page">
     <Link href="/agents" className="back-link"><ArrowLeft size={16} /> {t("agents.detail.back")}</Link>
     <header className="agent-detail-head"><div className="agent-title-wrap"><span className="agent-avatar xl"><Bot size={29} /></span><div><div className="title-line"><h1>{agent.name}</h1><span className={agent.is_active ? "pill purple" : "pill"}>{agent.is_active ? t("agents.detail.published") : t("agents.detail.unpublished")}</span></div><p>{agent.client.name} · {agent.description || t("agents.detail.noDescription")}</p></div></div><div className="header-actions"><button className={agent.is_active ? "button ghost" : "button primary"} onClick={togglePublish} disabled={busy}>{agent.is_active ? <><PowerOff size={16} /> {t("agents.detail.unpublish")}</> : <><Power size={16} /> {t("agents.detail.publish")}</>}</button><Link href={`/playground`} className="button secondary"><MessageSquareText size={17} /> {t("agents.detail.openPlayground")}</Link></div></header>
-    <nav className="tabs"><button className={tab === "details" ? "active" : ""} onClick={() => setTab("details")}><Settings2 size={17} /> {t("agents.detail.tabDetails")}</button><button className={tab === "knowledge" ? "active" : ""} onClick={() => setTab("knowledge")}><FileText size={17} /> {t("agents.detail.tabKnowledge")} <span>{documents.length}</span></button><button className={tab === "widget" ? "active" : ""} onClick={() => setTab("widget")}><Code size={17} /> {t("agents.detail.tabWidget")}</button><button className={tab === "playground" ? "active" : ""} onClick={() => setTab("playground")}><MessageSquareText size={17} /> {t("agents.detail.tabPlayground")}</button></nav>
+    <nav className="tabs"><button className={tab === "details" ? "active" : ""} onClick={() => setTab("details")}><Settings2 size={17} /> {t("agents.detail.tabDetails")}</button><button className={tab === "knowledge" ? "active" : ""} onClick={() => setTab("knowledge")}><FileText size={17} /> {t("agents.detail.tabKnowledge")} <span>{documents.length}</span></button><button className={tab === "tools" ? "active" : ""} onClick={() => setTab("tools")}><Wrench size={17} /> {t("tools.tab")} <span>{tools.length}</span></button><button className={tab === "widget" ? "active" : ""} onClick={() => setTab("widget")}><Code size={17} /> {t("agents.detail.tabWidget")}</button><button className={tab === "playground" ? "active" : ""} onClick={() => setTab("playground")}><MessageSquareText size={17} /> {t("agents.detail.tabPlayground")}</button></nav>
 
     {tab === "details" && <form className="settings-form" onSubmit={saveConfig}>
       <section className="settings-section"><div className="settings-copy"><h3>{t("agents.detail.generalHeading")}</h3><p>{t("agents.detail.generalCopy")}</p></div><div className="settings-fields"><div className="form-grid"><label>{t("agents.detail.clientLabel")}<select name="client_id" defaultValue={agent.client_id}>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label><label>{t("agents.detail.nameLabel")}<input name="name" required defaultValue={agent.name} /></label></div><label>{t("agents.detail.descriptionLabel")}<textarea name="description" rows={3} defaultValue={agent.description} /></label></div></section>
@@ -182,6 +184,8 @@ export default function AgentDetailPage() {
       <form className="qa-form" onSubmit={addQA}><input name="question" required placeholder={t("agents.detail.qaQuestionPlaceholder")} /><textarea name="answer" rows={2} required placeholder={t("agents.detail.qaAnswerPlaceholder")} /><button className="button secondary align-start" disabled={busy}><Plus size={15} /> {t("agents.detail.qaAdd")}</button></form>
       <div className="qa-list">{qaPairs.map((pair) => <div className="qa-item" key={pair.id}><div><strong>{pair.question}</strong><small>{pair.answer}</small></div><button type="button" className="icon-button danger-icon" onClick={() => removeQA(pair)} title={t("agents.detail.delete")}><Trash2 size={16} /></button></div>)}{!qaPairs.length && <div className="inline-empty slim"><MessageSquareText size={22} /><div><strong>{t("agents.detail.qaEmpty")}</strong></div></div>}</div>
     </section></>}
+
+    {tab === "tools" && <AgentToolsTab agentId={id} tools={tools} onToolsChange={setTools} />}
 
     {tab === "widget" && <form className="settings-form" onSubmit={saveWidget}>
       <section className="settings-section"><div className="settings-copy"><h3>{t("agents.detail.widgetHeading")}</h3><p>{t("agents.detail.widgetCopy")}</p></div><div className="settings-fields">

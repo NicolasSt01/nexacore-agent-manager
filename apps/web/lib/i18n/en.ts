@@ -10,6 +10,7 @@ import { settings } from "./dicts/settings";
 import { playground } from "./dicts/playground";
 import { portal } from "./dicts/portal";
 import { inbox } from "./dicts/inbox";
+import { tools } from "./dicts/tools";
 
 export const en = {
   ...core.en,
@@ -21,6 +22,7 @@ export const en = {
   playground: playground.en,
   portal: portal.en,
   inbox: inbox.en,
+  tools: tools.en,
 };
 
 export type Dictionary = typeof en;

@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     # Rate limiting on public/unauthenticated endpoints (per client IP). Disable
     # only for tests or when a proxy in front already enforces limits.
     rate_limit_enabled: bool = True
+    # SSRF guard for agent HTTP tools: URLs resolving to private/loopback
+    # addresses are rejected. Enable only on self-hosted deployments that need
+    # tools to reach internal services.
+    tools_allow_private_urls: bool = False
     storage_dir: Path = APP_DIR / "storage"
     backend_url: str = "http://localhost:8000"
     whatsapp_bridge_url: str = "http://localhost:3101"

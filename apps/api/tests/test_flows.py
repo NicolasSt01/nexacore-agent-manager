@@ -163,7 +163,7 @@ def test_main_crud_knowledge_and_persistent_chat(authenticated_client: TestClien
     conversation_id = conversation.json()["id"]
 
     fake_completion = AsyncMock(return_value=ai_service.Completion(text="The stated warranty is two years."))
-    monkeypatch.setattr(conversations_router, "chat_completion", fake_completion)
+    monkeypatch.setattr(conversations_router, "run_completion", fake_completion)
     sent = client.post(
         f"/api/conversations/{conversation_id}/messages",
         json={"content": "How long does the warranty last?"},
@@ -208,7 +208,7 @@ def test_widget_public_chat_and_gating(authenticated_client: TestClient, monkeyp
     assert config.json()["title"] == "Sofia"
     assert config.json()["greeting"] == "Hi!"
 
-    monkeypatch.setattr(widget_router, "chat_completion", AsyncMock(return_value=ai_service.Completion(text="Sure, happy to help!")))
+    monkeypatch.setattr(widget_router, "run_completion", AsyncMock(return_value=ai_service.Completion(text="Sure, happy to help!")))
     sent = client.post(f"/api/widget/{public_id}/messages", json={"session_id": "s1", "content": "hello"})
     assert sent.status_code == 200
     assert sent.json()["reply"] == "Sure, happy to help!"
@@ -267,7 +267,7 @@ def test_usage_recorded_and_reported(authenticated_client: TestClient, monkeypat
     ).json()
     conversation = client.post("/api/conversations", json={"agent_id": agent["id"]}).json()
 
-    monkeypatch.setattr(conversations_router, "chat_completion", AsyncMock(return_value=ai_service.Completion(text="Hi", input_tokens=12, output_tokens=8)))
+    monkeypatch.setattr(conversations_router, "run_completion", AsyncMock(return_value=ai_service.Completion(text="Hi", input_tokens=12, output_tokens=8)))
     client.post(f"/api/conversations/{conversation['id']}/messages", json={"content": "hello"})
 
     metrics = client.get("/api/dashboard/metrics").json()
@@ -321,7 +321,7 @@ def test_agent_qa_pairs_reach_prompt(authenticated_client: TestClient, monkeypat
 
     conversation = client.post("/api/conversations", json={"agent_id": agent["id"]}).json()
     fake_completion = AsyncMock(return_value=ai_service.Completion(text="ok"))
-    monkeypatch.setattr(conversations_router, "chat_completion", fake_completion)
+    monkeypatch.setattr(conversations_router, "run_completion", fake_completion)
     client.post(f"/api/conversations/{conversation['id']}/messages", json={"content": "hola"})
     prompt = fake_completion.await_args.args[4][0]["content"]
     assert "PREGUNTAS FRECUENTES" in prompt
@@ -354,7 +354,7 @@ def test_agent_brief_persists_and_reaches_prompt(authenticated_client: TestClien
 
     conversation = client.post("/api/conversations", json={"agent_id": agent["id"]}).json()
     fake_completion = AsyncMock(return_value=ai_service.Completion(text="ok"))
-    monkeypatch.setattr(conversations_router, "chat_completion", fake_completion)
+    monkeypatch.setattr(conversations_router, "run_completion", fake_completion)
     client.post(f"/api/conversations/{conversation['id']}/messages", json={"content": "hola"})
     prompt = fake_completion.await_args.args[4][0]["content"]
     assert "BRIEF DEL NEGOCIO" in prompt
@@ -423,7 +423,7 @@ def test_media_message_uses_image_capability(authenticated_client: TestClient, m
 
     monkeypatch.setattr(conversations_router, "describe_image", AsyncMock(return_value="a red pepperoni pizza"))
     fake_completion = AsyncMock(return_value=ai_service.Completion(text="Looks delicious!"))
-    monkeypatch.setattr(conversations_router, "chat_completion", fake_completion)
+    monkeypatch.setattr(conversations_router, "run_completion", fake_completion)
     sent = client.post(
         f"/api/conversations/{conversation['id']}/media",
         files={"file": ("photo.jpg", b"\xff\xd8fakejpeg", "image/jpeg")},
@@ -568,7 +568,7 @@ def test_whatsapp_inbound_image_uses_capability(authenticated_client: TestClient
 
     monkeypatch.setattr(whatsapp_router, "describe_image", AsyncMock(return_value="a photo of the menu"))
     fake_completion = AsyncMock(return_value=ai_service.Completion(text="Here are the dishes!"))
-    monkeypatch.setattr(whatsapp_router, "chat_completion", fake_completion)
+    monkeypatch.setattr(whatsapp_router, "run_completion", fake_completion)
     inbound = client.post(
         f"/api/internal/whatsapp/channels/{channel['id']}/inbound",
         headers=headers,
@@ -629,7 +629,7 @@ def test_whatsapp_channel_inbound_ai_takeover_and_session(authenticated_client: 
     assert restored["auth_state"]["creds"]["registered"] is True
 
     fake_completion = AsyncMock(return_value=ai_service.Completion(text="Yes, we are open Monday through Saturday."))
-    monkeypatch.setattr(whatsapp_router, "chat_completion", fake_completion)
+    monkeypatch.setattr(whatsapp_router, "run_completion", fake_completion)
     inbound = client.post(
         f"/api/internal/whatsapp/channels/{channel_id}/inbound",
         headers=headers,

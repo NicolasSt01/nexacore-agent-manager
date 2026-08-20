@@ -92,8 +92,32 @@ export type KnowledgeDocument = {
 
 export type QAPair = { id: string; question: string; answer: string };
 
+export type ToolParam = { name: string; type: "string" | "number" | "integer" | "boolean"; description: string; required: boolean };
+export type McpCachedTool = { name: string; description: string; input_schema?: Record<string, unknown> };
+export type AgentTool = {
+  id: string;
+  agent_id: string;
+  type: "http" | "mcp";
+  name: string;
+  description: string;
+  enabled: boolean;
+  url: string;
+  http_method: string;
+  prompt_instructions: string;
+  body_params: ToolParam[];
+  query_params: ToolParam[];
+  timeout_seconds: number;
+  transport: "sse" | "streamable_http";
+  cached_tools: McpCachedTool[];
+  tools_cached_at: string | null;
+  has_headers: boolean;
+  created_at: string;
+  updated_at: string;
+};
+export type ToolCallMeta = { name: string; arguments: Record<string, unknown>; result_preview: string; is_error: boolean };
+
 export type Source = { id: string; filename: string; excerpt: string };
-export type Message = { id: string; role: "user" | "assistant"; content: string; sources: Source[]; sender_type: "visitor" | "ai" | "human"; sender_name: string | null; created_at: string };
+export type Message = { id: string; role: "user" | "assistant"; content: string; sources: Source[]; tool_calls?: ToolCallMeta[] | null; sender_type: "visitor" | "ai" | "human"; sender_name: string | null; created_at: string };
 
 export type ConversationInbox = {
   id: string;

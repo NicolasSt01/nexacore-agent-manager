@@ -12,6 +12,8 @@ class Completion:
     text: str
     input_tokens: int = 0
     output_tokens: int = 0
+    # Set by the tool loop: [{name, arguments, result_preview, is_error}].
+    tool_calls: list[dict] | None = None
 
 # Substrings in a provider's 400 error that mean a sampling parameter is not
 # accepted (e.g. reasoning models, or Anthropic's temperature <= 1 limit). When
