@@ -22,7 +22,7 @@ from ..schemas import (
     WhatsAppOutboundConfirm,
 )
 from ..security import decrypt_secret, encrypt_secret
-from ..services.ai import chat_completion
+from ..services.tools import run_completion
 from ..services.knowledge import build_system_prompt, retrieve_knowledge
 from ..services.media import describe_image, transcribe_audio
 from ..services.providers import resolve_agent_credentials, resolve_provider_credentials
@@ -328,11 +328,11 @@ async def inbound_message(channel_id: uuid.UUID, payload: WhatsAppInbound, db: S
     ]
     base_url, api_key = credentials
     try:
-        completion = await chat_completion(
-            agent.provider,
+        completion = await run_completion(
+            db,
+            agent,
             base_url,
             api_key,
-            agent.model.strip(),
             messages,
             temperature=agent.temperature,
             max_tokens=agent.max_tokens,
@@ -348,6 +348,7 @@ async def inbound_message(channel_id: uuid.UUID, payload: WhatsAppInbound, db: S
         role="assistant",
         content=completion.text,
         sources=knowledge.sources,
+        tool_calls=completion.tool_calls,
         sender_type="ai",
         sender_name=agent.name,
     )

@@ -157,6 +157,41 @@ class Agent(Base):
     qa_pairs: Mapped[list["AgentQA"]] = relationship(back_populates="agent", cascade="all, delete-orphan", order_by="AgentQA.position")
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="agent", cascade="all, delete-orphan")
     whatsapp_channels: Mapped[list["WhatsAppChannel"]] = relationship(back_populates="agent")
+    tools: Mapped[list["AgentTool"]] = relationship(back_populates="agent", cascade="all, delete-orphan", order_by="AgentTool.created_at")
+
+
+class AgentTool(Base):
+    """A custom tool the agent can call: a user-defined HTTP endpoint
+    ("http") or an external MCP server ("mcp")."""
+
+    __tablename__ = "agent_tools"
+    __table_args__ = (UniqueConstraint("agent_id", "name", name="uq_agent_tools_agent_name"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    agent_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), index=True)
+    type: Mapped[str] = mapped_column(String(10))
+    name: Mapped[str] = mapped_column(String(64))
+    description: Mapped[str] = mapped_column(Text, default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # HTTP endpoint (may contain {param} path placeholders) or MCP server URL.
+    url: Mapped[str] = mapped_column(Text, default="")
+    # HTTP tools only.
+    http_method: Mapped[str] = mapped_column(String(10), default="GET")
+    prompt_instructions: Mapped[str] = mapped_column(Text, default="")
+    body_params: Mapped[list] = mapped_column(JSON, default=list)
+    query_params: Mapped[list] = mapped_column(JSON, default=list)
+    timeout_seconds: Mapped[int] = mapped_column(Integer, default=30)
+    # MCP servers only. cached_tools holds the last list_tools result so chat
+    # requests never block on discovery; refreshed on save/test-connection.
+    transport: Mapped[str] = mapped_column(String(20), default="streamable_http")
+    cached_tools: Mapped[list] = mapped_column(JSON, default=list)
+    tools_cached_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The full auth headers dict, encrypted at rest; never returned by the API.
+    encrypted_headers: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    agent: Mapped[Agent] = relationship(back_populates="tools")
 
 
 class WhatsAppChannel(Base):
@@ -279,6 +314,8 @@ class Message(Base):
     role: Mapped[str] = mapped_column(String(30))
     content: Mapped[str] = mapped_column(Text)
     sources: Mapped[list] = mapped_column(JSON, default=list)
+    # Tool usage behind an assistant reply: [{name, arguments, result_preview, is_error}].
+    tool_calls: Mapped[list | None] = mapped_column(JSON, nullable=True)
     sender_type: Mapped[str] = mapped_column(String(30), default="visitor")
     sender_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
     external_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

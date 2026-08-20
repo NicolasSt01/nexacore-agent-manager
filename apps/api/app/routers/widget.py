@@ -6,7 +6,7 @@ from ..database import get_db
 from ..models import Agency, Agent, Conversation, Message, now_utc
 from ..ratelimit import widget_rate_limit
 from ..schemas import WidgetConfigOut, WidgetMessageIn, WidgetReply
-from ..services.ai import chat_completion
+from ..services.tools import run_completion
 from ..services.knowledge import build_system_prompt, retrieve_knowledge
 from ..services.providers import resolve_agent_credentials
 from ..services.usage import record_usage
@@ -124,15 +124,15 @@ async def widget_message(public_id: str, payload: WidgetMessageIn, db: Session =
     ]
     base_url, api_key = credentials
     try:
-        completion = await chat_completion(
-            agent.provider, base_url, api_key, agent.model.strip(), messages,
+        completion = await run_completion(
+            db, agent, base_url, api_key, messages,
             temperature=agent.temperature, max_tokens=agent.max_tokens,
         )
     except HTTPException:
         return {"mode": "ai", "reply": None, "messages": []}
 
     conversation.updated_at = now_utc()
-    db.add(Message(conversation_id=conversation.id, role="assistant", content=completion.text, sources=knowledge.sources, sender_type="ai", sender_name=agent.name))
+    db.add(Message(conversation_id=conversation.id, role="assistant", content=completion.text, sources=knowledge.sources, tool_calls=completion.tool_calls, sender_type="ai", sender_name=agent.name))
     record_usage(db, agent.agency_id, agent.id, agent.provider, agent.model.strip(), completion)
     db.commit()
     return {"mode": "ai", "reply": completion.text, "messages": []}

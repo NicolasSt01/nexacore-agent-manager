@@ -293,6 +293,7 @@ class MessageOut(ORMModel):
     role: str
     content: str
     sources: list[dict] = []
+    tool_calls: list[dict] | None = None
     sender_type: str
     sender_name: str | None
     external_message_id: str | None = None

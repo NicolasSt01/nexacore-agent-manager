@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .routers import agency, agents, auth, catalog, clients, conversations, dashboard, domains, portal, providers, whatsapp, widget
+from .routers import agency, agent_tools, agents, auth, catalog, clients, conversations, dashboard, domains, portal, providers, whatsapp, widget
 
 
 settings = get_settings()
@@ -32,6 +32,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(agency.router, prefix="/api")
 app.include_router(clients.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
+app.include_router(agent_tools.router, prefix="/api")
 app.include_router(providers.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(conversations.router, prefix="/api")

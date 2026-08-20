@@ -15,7 +15,7 @@ from ..schemas import (
     ConversationOut,
     SendMessageRequest,
 )
-from ..services.ai import chat_completion
+from ..services.tools import run_completion
 from ..services.knowledge import build_system_prompt, retrieve_knowledge
 from ..services.media import describe_image, transcribe_audio
 from ..services.providers import resolve_agent_credentials, resolve_provider_credentials
@@ -194,8 +194,8 @@ async def _generate_reply(
     history = [{"role": item.role, "content": item.content} for item in recent]
     messages = [{"role": "system", "content": build_system_prompt(agent, knowledge.text)}, *history]
     base_url, api_key = credentials
-    completion = await chat_completion(
-        agent.provider, base_url, api_key, agent.model.strip(), messages, temperature=agent.temperature, max_tokens=agent.max_tokens
+    completion = await run_completion(
+        db, agent, base_url, api_key, messages, temperature=agent.temperature, max_tokens=agent.max_tokens
     )
     db.add(
         Message(
@@ -203,6 +203,7 @@ async def _generate_reply(
             role="assistant",
             content=completion.text,
             sources=knowledge.sources,
+            tool_calls=completion.tool_calls,
             sender_type="ai",
             sender_name=agent.name,
         )
