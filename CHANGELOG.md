@@ -36,8 +36,6 @@ dependency (`pip install -r requirements.txt`).
   deployments can opt out with `TOOLS_ALLOW_PRIVATE_URLS`.
 - Unread count and last-message preview on inbox conversations.
 - Channel badge on inbox conversations.
-- Extra sidebar links via `NEXT_PUBLIC_EXTRA_NAV`.
-- The API client follows an `X-Redirect-To` response header.
 
 ### Fixed
 
