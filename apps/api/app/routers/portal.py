@@ -19,7 +19,7 @@ from ..schemas import (
     SendMessageRequest,
 )
 from ..security import create_portal_token, decode_portal_token, verify_password
-from ..services.whatsapp import send_whatsapp_message
+from ..services.whatsapp import send_channel_message
 
 
 router = APIRouter(prefix="/portal", tags=["Client portal"])
@@ -178,7 +178,7 @@ async def portal_reply(
     conversation = _detail(db, client, conversation_id)
     if conversation.mode != "human":
         raise HTTPException(status_code=409, detail="Take control of the conversation before replying")
-    external_message_id = await send_whatsapp_message(conversation, payload.content.strip())
+    external_message_id = await send_channel_message(db, conversation, payload.content.strip())
     db.add(
         Message(
             conversation_id=conversation.id,

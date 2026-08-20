@@ -2,7 +2,23 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .routers import agency, agent_tools, agents, auth, catalog, clients, conversations, dashboard, domains, portal, providers, whatsapp, widget
+from .routers import (
+    agency,
+    agent_tools,
+    agents,
+    auth,
+    catalog,
+    clients,
+    conversations,
+    dashboard,
+    domains,
+    portal,
+    providers,
+    whatsapp,
+    whatsapp_cloud,
+    whatsapp_cloud_webhook,
+    widget,
+)
 
 
 settings = get_settings()
@@ -40,5 +56,7 @@ app.include_router(dashboard.router, prefix="/api")
 app.include_router(portal.router, prefix="/api")
 app.include_router(whatsapp.router, prefix="/api")
 app.include_router(whatsapp.internal_router, prefix="/api")
+app.include_router(whatsapp_cloud.router, prefix="/api")
+app.include_router(whatsapp_cloud_webhook.public_router, prefix="/api")
 app.include_router(widget.router, prefix="/api")
 app.include_router(domains.public_router, prefix="/api")

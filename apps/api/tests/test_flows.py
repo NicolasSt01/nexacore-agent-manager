@@ -8,10 +8,10 @@ from app.routers import agents as agents_router
 from app.routers import clients as clients_router
 from app.routers import providers as providers_router
 from app.routers import conversations as conversations_router
-from app.routers import whatsapp as whatsapp_router
 from app.routers import widget as widget_router
 from app.config import get_settings
 from app.services import ai as ai_service
+from app.services import whatsapp_inbound as whatsapp_inbound_service
 
 
 def _fake_http(monkeypatch, captured, response_json):
@@ -566,9 +566,9 @@ def test_whatsapp_inbound_image_uses_capability(authenticated_client: TestClient
     channel = client.put(f"/api/whatsapp/channels/{customer['id']}", json={"agent_id": agent["id"]}).json()
     headers = {"X-Bridge-Token": get_settings().whatsapp_bridge_token}
 
-    monkeypatch.setattr(whatsapp_router, "describe_image", AsyncMock(return_value="a photo of the menu"))
+    monkeypatch.setattr(whatsapp_inbound_service, "describe_image", AsyncMock(return_value="a photo of the menu"))
     fake_completion = AsyncMock(return_value=ai_service.Completion(text="Here are the dishes!"))
-    monkeypatch.setattr(whatsapp_router, "run_completion", fake_completion)
+    monkeypatch.setattr(whatsapp_inbound_service, "run_completion", fake_completion)
     inbound = client.post(
         f"/api/internal/whatsapp/channels/{channel['id']}/inbound",
         headers=headers,
@@ -629,7 +629,7 @@ def test_whatsapp_channel_inbound_ai_takeover_and_session(authenticated_client: 
     assert restored["auth_state"]["creds"]["registered"] is True
 
     fake_completion = AsyncMock(return_value=ai_service.Completion(text="Yes, we are open Monday through Saturday."))
-    monkeypatch.setattr(whatsapp_router, "run_completion", fake_completion)
+    monkeypatch.setattr(whatsapp_inbound_service, "run_completion", fake_completion)
     inbound = client.post(
         f"/api/internal/whatsapp/channels/{channel_id}/inbound",
         headers=headers,
@@ -667,7 +667,7 @@ def test_whatsapp_channel_inbound_ai_takeover_and_session(authenticated_client: 
     assert fake_completion.await_count == 1
 
     sender = AsyncMock(return_value="wa-out-human-1")
-    monkeypatch.setattr(conversations_router, "send_whatsapp_message", sender)
+    monkeypatch.setattr(conversations_router, "send_channel_message", sender)
     reply = client.post(
         f"/api/conversations/{conversation_id}/reply", json={"content": "Hi Maria, I'll assist you personally."}
     )

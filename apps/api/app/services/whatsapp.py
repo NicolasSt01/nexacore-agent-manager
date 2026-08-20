@@ -2,9 +2,12 @@ import uuid
 
 import httpx
 from fastapi import HTTPException
+from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import Conversation
+from ..models import Conversation, WhatsAppCloudChannel
+from ..security import decrypt_secret
+from .whatsapp_cloud import send_text
 
 
 async def bridge_command(method: str, path: str, payload: dict | None = None) -> dict:
@@ -33,14 +36,28 @@ async def bridge_command(method: str, path: str, payload: dict | None = None) ->
     return response.json()
 
 
-async def send_whatsapp_message(conversation: Conversation, content: str) -> str | None:
-    if conversation.channel != "whatsapp":
-        return None
-    if not conversation.whatsapp_channel_id or not conversation.external_chat_id:
-        raise HTTPException(status_code=409, detail="This conversation does not have a valid WhatsApp destination")
-    result = await bridge_command(
-        "POST",
-        f"/channels/{conversation.whatsapp_channel_id}/send",
-        {"remote_jid": conversation.external_chat_id, "text": content},
-    )
-    return result.get("external_message_id")
+async def send_channel_message(db: Session, conversation: Conversation, content: str) -> str | None:
+    """Deliver an operator message through the conversation's channel. Returns
+    the external message id, or None for channels without outbound delivery."""
+    if conversation.channel == "whatsapp":
+        if not conversation.whatsapp_channel_id or not conversation.external_chat_id:
+            raise HTTPException(status_code=409, detail="This conversation does not have a valid WhatsApp destination")
+        result = await bridge_command(
+            "POST",
+            f"/channels/{conversation.whatsapp_channel_id}/send",
+            {"remote_jid": conversation.external_chat_id, "text": content},
+        )
+        return result.get("external_message_id")
+    if conversation.channel == "whatsapp_cloud":
+        if not conversation.whatsapp_cloud_channel_id or not conversation.external_chat_id:
+            raise HTTPException(status_code=409, detail="This conversation does not have a valid WhatsApp destination")
+        channel = db.get(WhatsAppCloudChannel, conversation.whatsapp_cloud_channel_id)
+        if not channel or not channel.encrypted_access_token or not channel.phone_number_id:
+            raise HTTPException(status_code=409, detail="The WhatsApp API channel is not configured")
+        return await send_text(
+            decrypt_secret(channel.encrypted_access_token),
+            channel.phone_number_id,
+            conversation.external_chat_id,
+            content,
+        )
+    return None

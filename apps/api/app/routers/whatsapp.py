@@ -3,10 +3,11 @@ import binascii
 import hmac
 import json
 import uuid
+from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload
 
 from ..config import get_settings
 from ..database import get_db
@@ -22,12 +23,8 @@ from ..schemas import (
     WhatsAppOutboundConfirm,
 )
 from ..security import decrypt_secret, encrypt_secret
-from ..services.tools import run_completion
-from ..services.knowledge import build_system_prompt, retrieve_knowledge
-from ..services.media import describe_image, transcribe_audio
-from ..services.providers import resolve_agent_credentials, resolve_provider_credentials
-from ..services.usage import record_usage
 from ..services.whatsapp import bridge_command
+from ..services.whatsapp_inbound import InboundMessage, process_inbound
 
 
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
@@ -210,40 +207,6 @@ def update_status(channel_id: uuid.UUID, payload: WhatsAppInternalStatus, db: Se
     db.commit()
 
 
-def _media_placeholder(kind: str) -> str:
-    return "[El cliente envió una imagen]" if kind == "image" else "[El cliente envió una nota de voz]"
-
-
-async def _inbound_content(db: Session, agent: Agent, payload: WhatsAppInbound) -> str:
-    """Resolve the effective user text, transcribing/describing media when the
-    agent's capabilities allow it. Best-effort: falls back to a placeholder."""
-    text = (payload.text or "").strip()
-    if not payload.media_kind or not payload.media_base64:
-        return text
-    enabled = (payload.media_kind == "image" and agent.image_enabled) or (
-        payload.media_kind == "audio" and agent.audio_enabled
-    )
-    credentials = resolve_provider_credentials(db, agent.agency_id, "openai")
-    if not enabled or not credentials:
-        return text or _media_placeholder(payload.media_kind)
-    try:
-        data = base64.b64decode(payload.media_base64)
-        base_url, api_key = credentials
-        if payload.media_kind == "image":
-            model = agent.image_model.strip() or agent.model.strip()
-            instruction = (
-                "Describe con detalle el contenido de esta imagen para que un asistente pueda responder al cliente."
-                + (f" El cliente escribió: {text}" if text else "")
-            )
-            description = await describe_image(base_url, api_key, model, data, payload.media_mime or "image/jpeg", instruction)
-            return (f"{text}\n\n" if text else "") + f"[Imagen recibida] {description}"
-        model = agent.audio_model.strip() or "whisper-1"
-        transcript = await transcribe_audio(base_url, api_key, model, data, "audio.ogg", payload.media_mime or "audio/ogg")
-        return (f"{text}\n\n" if text else "") + (transcript or _media_placeholder("audio"))
-    except (HTTPException, binascii.Error, ValueError):
-        return text or _media_placeholder(payload.media_kind)
-
-
 @internal_router.post(
     "/channels/{channel_id}/inbound",
     response_model=WhatsAppInboundResult,
@@ -254,116 +217,28 @@ async def inbound_message(channel_id: uuid.UUID, payload: WhatsAppInbound, db: S
     if not channel.is_enabled:
         raise HTTPException(status_code=409, detail="The channel is disconnected")
 
-    existing = db.scalar(
-        select(Message)
-        .join(Conversation)
-        .where(
-            Conversation.whatsapp_channel_id == channel.id,
-            Message.external_message_id == payload.external_message_id,
-        )
-    )
-    if existing:
-        return {"accepted": False, "conversation_id": existing.conversation_id}
-
-    conversation = db.scalar(
-        select(Conversation)
-        .options(selectinload(Conversation.messages))
-        .where(
-            Conversation.whatsapp_channel_id == channel.id,
-            Conversation.external_chat_id == payload.remote_jid,
-        )
-    )
-    if not conversation:
-        title = (payload.sender_name or payload.remote_jid.split("@")[0])[:240]
-        conversation = Conversation(
-            agency_id=channel.agency_id,
-            client_id=channel.client_id,
-            agent_id=channel.agent_id,
-            whatsapp_channel_id=channel.id,
+    media_bytes = None
+    if payload.media_base64:
+        try:
+            media_bytes = base64.b64decode(payload.media_base64)
+        except (binascii.Error, ValueError):
+            media_bytes = None
+    result = await process_inbound(
+        db,
+        channel,
+        InboundMessage(
+            external_message_id=payload.external_message_id,
             external_chat_id=payload.remote_jid,
-            contact_name=payload.sender_name,
-            title=title,
-            channel="whatsapp",
-        )
-        db.add(conversation)
-        db.flush()
-    elif payload.sender_name:
-        conversation.contact_name = payload.sender_name
-
-    content = await _inbound_content(db, channel.agent, payload)
-    inbound = Message(
-        conversation_id=conversation.id,
-        role="user",
-        content=content,
-        sender_type="visitor",
-        sender_name=payload.sender_name or "WhatsApp contact",
-        external_message_id=payload.external_message_id,
+            sender_name=payload.sender_name,
+            text=payload.text,
+            media_kind=payload.media_kind,
+            media_bytes=media_bytes,
+            media_mime=payload.media_mime,
+        ),
+        conversation_channel="whatsapp",
+        channel_fk_field="whatsapp_channel_id",
     )
-    conversation.updated_at = now_utc()
-    db.add(inbound)
-    db.commit()
-    if conversation.mode == "human":
-        return {"accepted": True, "conversation_id": conversation.id, "mode": "human"}
-
-    agent = channel.agent
-    credentials = resolve_agent_credentials(db, agent)
-    if not agent.is_active or not credentials or not agent.model.strip():
-        channel.last_error = "A message was received, but the assigned agent is not ready (model or provider key missing)."
-        channel.updated_at = now_utc()
-        db.commit()
-        return {"accepted": True, "conversation_id": conversation.id, "mode": "ai"}
-
-    knowledge = await retrieve_knowledge(db, agent, content)
-    db.refresh(conversation)
-    history = db.scalars(
-        select(Message)
-        .where(Message.conversation_id == conversation.id)
-        .order_by(Message.created_at.desc())
-        .limit(agent.memory_limit)
-    ).all()
-    history = list(reversed(history))
-    messages = [
-        {"role": "system", "content": build_system_prompt(agent, knowledge.text)},
-        *[{"role": item.role, "content": item.content} for item in history],
-    ]
-    base_url, api_key = credentials
-    try:
-        completion = await run_completion(
-            db,
-            agent,
-            base_url,
-            api_key,
-            messages,
-            temperature=agent.temperature,
-            max_tokens=agent.max_tokens,
-        )
-    except Exception as exc:
-        channel.last_error = f"Message received, but the agent could not reply: {str(exc)[:400]}"
-        channel.updated_at = now_utc()
-        db.commit()
-        return {"accepted": True, "conversation_id": conversation.id, "mode": "ai"}
-
-    outbound = Message(
-        conversation_id=conversation.id,
-        role="assistant",
-        content=completion.text,
-        sources=knowledge.sources,
-        tool_calls=completion.tool_calls,
-        sender_type="ai",
-        sender_name=agent.name,
-    )
-    record_usage(db, agent.agency_id, agent.id, agent.provider, agent.model.strip(), completion)
-    conversation.updated_at = now_utc()
-    channel.last_error = None
-    db.add(outbound)
-    db.commit()
-    return {
-        "accepted": True,
-        "reply": completion.text,
-        "conversation_id": conversation.id,
-        "mode": "ai",
-        "outbound_message_id": outbound.id,
-    }
+    return asdict(result)
 
 
 @internal_router.post("/channels/{channel_id}/outbound-confirm", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(_require_bridge)])

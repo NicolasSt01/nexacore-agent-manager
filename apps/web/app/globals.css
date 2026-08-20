@@ -260,6 +260,7 @@ textarea { line-height: 1.55; }
 .inbox-avatar { position: relative; flex: 0 0 auto; }
 .channel-badge { position: absolute; right: -3px; bottom: -3px; width: 16px; height: 16px; display: grid; place-items: center; color: white; border: 2px solid white; border-radius: 50%; }
 .channel-badge.whatsapp { background: #25a56a; }
+.channel-badge.whatsapp_cloud { background: #0f8b76; }
 .channel-badge.widget { background: #2f6df0; }
 .channel-badge.playground { background: #7c5cff; }
 .row-arrow { width: 34px; height: 34px; display: grid; place-items: center; color: #737b8b; border-radius: 6px; }
@@ -795,7 +796,14 @@ textarea { line-height: 1.55; }
 .wa-phone strong { color: #1f2b27; font-size: 18px; }
 .wa-phone em { color: #6e7974; font-size: 12px; font-style: normal; }
 .wa-ready { display: flex; align-items: center; gap: 7px; color: #087b52; font-size: 12px; font-weight: 650; }
-.wa-actions { margin-top: 20px; display: flex; justify-content: flex-end; }
+.wa-actions { margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px; }
+.wa-cloud-form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.wa-cloud-form label { display: flex; flex-direction: column; gap: 7px; color: #3c4454; font-size: 13px; font-weight: 600; }
+.wa-copy-field { margin-top: 12px; display: flex; align-items: flex-end; gap: 10px; }
+.wa-copy-field label { flex: 1; display: flex; flex-direction: column; gap: 7px; color: #3c4454; font-size: 13px; font-weight: 600; }
+.wa-copy-field input { color: #545d6e; background: #fbfcfd; }
+.wa-copy-field .button { flex: 0 0 auto; }
+.wa-webhook-steps { margin: 16px 0 0; padding-left: 20px; color: #545d6e; font-size: 13px; line-height: 1.9; }
 .wa-side { padding: 22px; color: #5a6373; }
 .wa-side > svg { color: #5b53d6; }
 .wa-side h3 { margin: 12px 0 7px; color: #242b38; font-size: 14px; }

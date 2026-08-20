@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     backend_url: str = "http://localhost:8000"
     whatsapp_bridge_url: str = "http://localhost:3101"
     whatsapp_bridge_token: str = "dev-local-change-this-bridge-token"
+    # Meta Graph API root used by the WhatsApp Cloud API channel; override to
+    # point at a mock server in tests.
+    meta_graph_base_url: str = "https://graph.facebook.com/v23.0"
 
     model_config = SettingsConfigDict(
         env_file=(REPO_ROOT / ".env", APP_DIR / ".env"),

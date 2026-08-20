@@ -62,9 +62,10 @@ Full documentation lives at **[openlivery.com/docs](https://openlivery.com/docs)
 - ✅ Tool usage recorded per reply and surfaced in the playground, including failure details
 
 **Channels** — [WhatsApp](https://openlivery.com/docs/whatsapp) · [Web widget](https://openlivery.com/docs/web-widget)
-- ✅ **WhatsApp** through Baileys — QR link, per-client number, encrypted persistent session
+- ✅ **WhatsApp Cloud API** (official Meta API) — bring your own Meta app credentials, signed webhooks, per-client number
+- ✅ **WhatsApp QR** through Baileys — QR link, per-client number, encrypted persistent session
 - ✅ Embeddable **web chat widget** for any website
-- 🚧 Instagram DM, Facebook Messenger, WhatsApp Cloud API *(planned)*
+- 🚧 Instagram DM, Facebook Messenger *(planned)*
 
 **Operations** — [Inbox](https://openlivery.com/docs/inbox) · [Client portal](https://openlivery.com/docs/client-portal) · [Dashboard](https://openlivery.com/docs/dashboard)
 - ✅ Unified **Inbox** with server-side search, filter tabs, unread tracking, pagination and human takeover

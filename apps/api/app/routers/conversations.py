@@ -20,7 +20,7 @@ from ..services.knowledge import build_system_prompt, retrieve_knowledge
 from ..services.media import describe_image, transcribe_audio
 from ..services.providers import resolve_agent_credentials, resolve_provider_credentials
 from ..services.usage import record_usage
-from ..services.whatsapp import send_whatsapp_message
+from ..services.whatsapp import send_channel_message
 
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
@@ -310,7 +310,7 @@ async def reply_as_human(
     conversation = _conversation(db, user, conversation_id)
     if conversation.mode != "human":
         raise HTTPException(status_code=409, detail="Take control of the conversation before replying")
-    external_message_id = await send_whatsapp_message(conversation, payload.content.strip())
+    external_message_id = await send_channel_message(db, conversation, payload.content.strip())
     db.add(
         Message(
             conversation_id=conversation.id,

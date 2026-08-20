@@ -83,6 +83,9 @@ class Client(Base):
     whatsapp_channel: Mapped["WhatsAppChannel | None"] = relationship(
         back_populates="client", cascade="all, delete-orphan", uselist=False
     )
+    whatsapp_cloud_channel: Mapped["WhatsAppCloudChannel | None"] = relationship(
+        back_populates="client", cascade="all, delete-orphan", uselist=False
+    )
 
     @property
     def portal_password_configured(self) -> bool:
@@ -157,6 +160,7 @@ class Agent(Base):
     qa_pairs: Mapped[list["AgentQA"]] = relationship(back_populates="agent", cascade="all, delete-orphan", order_by="AgentQA.position")
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="agent", cascade="all, delete-orphan")
     whatsapp_channels: Mapped[list["WhatsAppChannel"]] = relationship(back_populates="agent")
+    whatsapp_cloud_channels: Mapped[list["WhatsAppCloudChannel"]] = relationship(back_populates="agent")
     tools: Mapped[list["AgentTool"]] = relationship(back_populates="agent", cascade="all, delete-orphan", order_by="AgentTool.created_at")
 
 
@@ -216,6 +220,39 @@ class WhatsAppChannel(Base):
     client: Mapped[Client] = relationship(back_populates="whatsapp_channel")
     agent: Mapped[Agent] = relationship(back_populates="whatsapp_channels")
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="whatsapp_channel")
+
+
+class WhatsAppCloudChannel(Base):
+    """Official WhatsApp Business Cloud API channel (Meta Graph API). Coexists
+    with the Baileys channel: a client can have one of each, on different
+    numbers. Credentials are provided manually (bring your own Meta app)."""
+
+    __tablename__ = "whatsapp_cloud_channels"
+    __table_args__ = (UniqueConstraint("client_id", name="uq_whatsapp_cloud_channels_client_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    agency_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agencies.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    agent_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agents.id", ondelete="RESTRICT"), index=True)
+    status: Mapped[str] = mapped_column(String(30), default="disconnected")
+    phone_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    phone_number_id: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    waba_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    encrypted_access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    encrypted_app_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Token the owner pastes into their Meta app's webhook config; it must be
+    # re-displayable, so it is stored in plain text like portal_domain_token.
+    webhook_verify_token: Mapped[str] = mapped_column(String(64), default=new_public_id, server_default="")
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    client: Mapped[Client] = relationship(back_populates="whatsapp_cloud_channel")
+    agent: Mapped[Agent] = relationship(back_populates="whatsapp_cloud_channels")
+    conversations: Mapped[list["Conversation"]] = relationship(back_populates="whatsapp_cloud_channel")
 
 
 class AgentQA(Base):
@@ -280,6 +317,9 @@ class Conversation(Base):
     __tablename__ = "conversations"
     __table_args__ = (
         UniqueConstraint("whatsapp_channel_id", "external_chat_id", name="uq_conversations_whatsapp_chat"),
+        UniqueConstraint(
+            "whatsapp_cloud_channel_id", "external_chat_id", name="uq_conversations_whatsapp_cloud_chat"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
@@ -292,6 +332,9 @@ class Conversation(Base):
     whatsapp_channel_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("whatsapp_channels.id", ondelete="CASCADE"), nullable=True, index=True
     )
+    whatsapp_cloud_channel_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("whatsapp_cloud_channels.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     external_chat_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contact_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
     operator_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -300,6 +343,7 @@ class Conversation(Base):
 
     agent: Mapped[Agent] = relationship(back_populates="conversations")
     whatsapp_channel: Mapped[WhatsAppChannel | None] = relationship(back_populates="conversations")
+    whatsapp_cloud_channel: Mapped[WhatsAppCloudChannel | None] = relationship(back_populates="conversations")
     messages: Mapped[list["Message"]] = relationship(back_populates="conversation", cascade="all, delete-orphan", order_by="Message.created_at")
 
 

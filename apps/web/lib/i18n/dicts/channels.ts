@@ -10,13 +10,22 @@ const en = {
     allClients: "All clients",
     openClient: "Open client",
   },
+  whatsappCloud: {
+    status: "Available",
+    title: "WhatsApp API",
+    description:
+      "Official WhatsApp Business Cloud API, hosted by Meta. Connect a number with your own Meta app credentials.",
+    ownerPlaceholder: "Choose a client to configure its number",
+    configure: "Configure WhatsApp API",
+    selectClient: "Select a client",
+  },
   whatsapp: {
     status: "Available",
-    title: "WhatsApp",
+    title: "WhatsApp QR",
     description:
-      "Receive real messages, reply with an agent, and let the team take over from the Inbox.",
+      "Scan a QR with the WhatsApp app on your phone, reply with an agent, and let the team take over from the Inbox.",
     ownerPlaceholder: "Choose a client to configure its number",
-    configure: "Configure WhatsApp",
+    configure: "Configure WhatsApp QR",
     selectClient: "Select a client",
   },
   future: {
@@ -53,13 +62,22 @@ const es: typeof en = {
     allClients: "Todos los clientes",
     openClient: "Abrir cliente",
   },
+  whatsappCloud: {
+    status: "Disponible",
+    title: "WhatsApp API",
+    description:
+      "API oficial de WhatsApp Business Cloud, alojada por Meta. Conecta un número con las credenciales de tu propia app de Meta.",
+    ownerPlaceholder: "Elige un cliente para configurar su número",
+    configure: "Configurar WhatsApp API",
+    selectClient: "Selecciona un cliente",
+  },
   whatsapp: {
     status: "Disponible",
-    title: "WhatsApp",
+    title: "WhatsApp QR",
     description:
-      "Recibe mensajes reales, responde con un agente y permite que el equipo tome el control desde el Inbox.",
+      "Escanea un QR con la app de WhatsApp de tu teléfono, responde con un agente y permite que el equipo tome el control desde el Inbox.",
     ownerPlaceholder: "Elige un cliente para configurar su número",
-    configure: "Configurar WhatsApp",
+    configure: "Configurar WhatsApp QR",
     selectClient: "Selecciona un cliente",
   },
   future: {
