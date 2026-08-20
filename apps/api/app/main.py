@@ -25,7 +25,7 @@ settings = get_settings()
 app = FastAPI(
     title="OpenLivery API",
     description="API to manage agencies, clients and AI agents.",
-    version="0.2.0",
+    version="0.3.0",
 )
 app.add_middleware(
     CORSMiddleware,

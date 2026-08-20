@@ -9,6 +9,40 @@ and are released together.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-20
+
+Upgrading: this release adds a database migration (applied automatically by the
+Docker stack; run `alembic upgrade head` on local setups).
+
+### Added
+
+- WhatsApp Cloud API channel (official Meta API), independent from the QR
+  channel: a client can have both connected on different numbers.
+  - Bring your own Meta app: phone number ID, optional WABA id, permanent
+    access token and app secret. Secrets are encrypted at rest and write-only
+    (never returned by the API).
+  - Per-channel webhook with the Meta verify handshake and HMAC-SHA256
+    signature validation over the raw request body. The UI shows the callback
+    URL and verify token with copy buttons and the Meta setup steps.
+  - Inbound text, image and audio. Media is downloaded from the Graph API and
+    goes through the same transcription/description pipeline as the QR
+    channel; Meta webhook retries are deduplicated by message id.
+  - AI replies and human operator replies (Inbox and client portal) are
+    delivered through the Graph API.
+  - "Connect and verify" validates the credentials against the Graph API and
+    captures the number and verified name.
+  - New "WhatsApp API" card on the Channels page and on the client channels
+    tab, plus an inbox filter and badge for the new channel.
+- `META_GRAPH_BASE_URL` setting (optional) to pin a Graph API version or point
+  the channel at a mock server.
+
+### Changed
+
+- The Baileys channel is now labeled "WhatsApp QR" across the UI to
+  distinguish it from the official API channel.
+- The inbound WhatsApp pipeline (dedupe, conversation lookup, media handling,
+  human takeover, AI reply) is shared between both channels.
+
 ## [0.2.0] - 2026-08-20
 
 Upgrading: this release adds a database migration (applied automatically by the
