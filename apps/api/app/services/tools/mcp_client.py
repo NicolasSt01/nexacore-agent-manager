@@ -10,9 +10,12 @@ import asyncio
 import json
 from contextlib import asynccontextmanager
 
+import httpx
+from httpx_sse import SSEError
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamablehttp_client
+from mcp.shared.exceptions import McpError
 
 from ...models import AgentTool
 from ...security import decrypt_secret
@@ -75,3 +78,38 @@ async def call_mcp_tool(tool: AgentTool, tool_name: str, args: dict) -> tuple[st
     parts = [block.text for block in result.content if getattr(block, "type", "") == "text"]
     text = "\n".join(parts).strip() or "(empty result)"
     return text, bool(result.isError)
+
+
+def _flatten_exceptions(exc: BaseException) -> list[BaseException]:
+    # The SDK runs transports in anyio task groups, so real causes arrive
+    # wrapped in (possibly nested) ExceptionGroups.
+    if isinstance(exc, BaseExceptionGroup):
+        return [cause for sub in exc.exceptions for cause in _flatten_exceptions(sub)]
+    return [exc]
+
+
+def describe_mcp_error(exc: BaseException) -> str:
+    """Map a discovery/connection failure to a safe, actionable hint. Never
+    includes header values or response bodies."""
+    for cause in _flatten_exceptions(exc):
+        if isinstance(cause, httpx.HTTPStatusError):
+            status = cause.response.status_code
+            if status in (401, 403):
+                return f"the server rejected the credentials (HTTP {status}). Check the auth headers"
+            if status in (404, 405):
+                return f"the endpoint responded with HTTP {status}. Check the server URL and transport"
+            return f"the server responded with HTTP {status}"
+        if isinstance(cause, (TimeoutError, httpx.TimeoutException)):
+            return "the connection timed out"
+        if isinstance(cause, (httpx.ConnectError, httpx.UnsupportedProtocol)):
+            return "the server could not be reached. Check the URL"
+        if isinstance(cause, httpx.InvalidURL):
+            return "the URL is not valid"
+        if isinstance(cause, httpx.TransportError):
+            # Read/write/protocol errors: the host answered but the exchange broke.
+            return "the connection failed while talking to the server. Check the URL and transport"
+        if isinstance(cause, SSEError):
+            return "the endpoint did not return an SSE stream. Try the Streamable HTTP transport"
+        if isinstance(cause, McpError):
+            return "the endpoint did not respond like an MCP server. Check the URL and transport"
+    return "check the URL, transport and auth headers"

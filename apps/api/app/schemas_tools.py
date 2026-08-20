@@ -18,6 +18,9 @@ TOOL_NAME_RE = re.compile(TOOL_NAME_PATTERN)
 
 
 def _validate_url(value: str) -> str:
+    # urlparse tolerates surrounding whitespace but httpx does not; store the
+    # trimmed value so a URL pasted with spaces still works.
+    value = value.strip()
     parsed = urlparse(value)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise ValueError("URL must start with http:// or https://")

@@ -56,7 +56,9 @@ async def execute_http_tool(tool: AgentTool, args: dict) -> tuple[str, bool]:
     text = response.text
     if len(text) > MAX_RESPONSE_CHARS:
         text = text[:MAX_RESPONSE_CHARS] + "... [truncated]"
-    return f"HTTP {response.status_code}: {text}", response.status_code >= 400
+    # Redirects (3xx) count as failures: they are never followed, so the data
+    # was not retrieved.
+    return f"HTTP {response.status_code}: {text}", response.status_code >= 300
 
 
 def _blocked_reason(url: str) -> str | None:

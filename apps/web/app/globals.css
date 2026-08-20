@@ -1027,3 +1027,6 @@ input:focus, textarea:focus, select:focus { border-color: #3b8ca0; box-shadow: 0
 .mcp-discovered > strong { color: #39415b; font-size: 12px; }
 .mcp-actions .spacer { flex: 1; }
 .sources span.tool-error { color: var(--red); border-color: #f0c3c3; background: var(--red-soft); }
+.tool-error-details { margin-top: 4px; display: flex; flex-direction: column; gap: 3px; }
+.tool-error-details small { display: inline-flex; align-items: baseline; gap: 5px; padding: 6px 9px; color: #9b2c2c; background: var(--red-soft); border: 1px solid #f0c3c3; border-radius: 7px; font-size: 11px; line-height: 1.5; word-break: break-word; }
+.tool-error-details small svg { flex: 0 0 auto; align-self: center; }

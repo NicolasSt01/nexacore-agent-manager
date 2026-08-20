@@ -5,6 +5,7 @@ row is saved; the discovered list is cached on the row for chat-time use.
 """
 
 import json
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -16,11 +17,12 @@ from ..deps import get_current_user
 from ..models import AgentTool, User, now_utc
 from ..schemas_tools import AgentToolIn, AgentToolOut, HttpToolUpdate, McpTestIn, McpTestOut
 from ..security import decrypt_secret, encrypt_secret
-from ..services.tools.mcp_client import discover_mcp_tools
+from ..services.tools.mcp_client import _flatten_exceptions, describe_mcp_error, discover_mcp_tools
 from .agents import _agent
 
 
 router = APIRouter(prefix="/agents/{agent_id}/tools", tags=["Agent tools"])
+logger = logging.getLogger("openlivery.agent_tools")
 
 
 def _tool(db: Session, user: User, agent_id: uuid.UUID, tool_id: uuid.UUID) -> AgentTool:
@@ -49,9 +51,12 @@ async def _discover_or_502(url: str, transport: str, headers: dict[str, str] | N
     try:
         return await discover_mcp_tools(url, transport, headers)
     except Exception as exc:
+        # Exception reprs carry no header values, so this is safe to log.
+        causes = "; ".join(f"{type(c).__name__}: {c}" for c in _flatten_exceptions(exc))
+        logger.warning("MCP discovery failed url=%s transport=%s causes=[%s]", url, transport, causes[:500])
         raise HTTPException(
             status_code=502,
-            detail="Could not connect to the MCP server. Check the URL, transport and auth headers.",
+            detail=f"Could not connect to the MCP server: {describe_mcp_error(exc)}.",
         ) from exc
 
 

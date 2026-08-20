@@ -106,6 +106,51 @@ def test_mcp_test_connection_and_create(authenticated_client: TestClient, monkey
     assert [item["name"] for item in client.get(f"/api/agents/{agent_id}/tools").json()] == ["orders"]
 
 
+def test_tool_urls_are_trimmed():
+    from app.schemas_tools import HttpToolIn, McpTestIn
+
+    assert McpTestIn(url="  https://mcp.example.test/mcp ").url == "https://mcp.example.test/mcp"
+    tool = HttpToolIn(type="http", name="check", url=" https://api.example.test/x ")
+    assert tool.url == "https://api.example.test/x"
+
+
+def test_describe_mcp_error_hints():
+    from app.services.tools.mcp_client import describe_mcp_error
+
+    def status_error(code: int) -> httpx.HTTPStatusError:
+        return httpx.HTTPStatusError(
+            f"HTTP {code}",
+            request=httpx.Request("POST", "https://mcp.example.test/mcp"),
+            response=httpx.Response(code),
+        )
+
+    assert "credentials (HTTP 401)" in describe_mcp_error(status_error(401))
+    assert "HTTP 404" in describe_mcp_error(status_error(404))
+    assert "HTTP 500" in describe_mcp_error(status_error(500))
+    assert "could not be reached" in describe_mcp_error(httpx.ConnectError("refused"))
+    assert "timed out" in describe_mcp_error(TimeoutError())
+    assert "connection failed while talking" in describe_mcp_error(httpx.ReadError("broken pipe"))
+    assert "connection failed while talking" in describe_mcp_error(httpx.RemoteProtocolError("bad chunk"))
+    # Real causes arrive wrapped in nested anyio ExceptionGroups.
+    grouped = BaseExceptionGroup("outer", [BaseExceptionGroup("inner", [status_error(403)])])
+    assert "credentials (HTTP 403)" in describe_mcp_error(grouped)
+    assert "check the URL, transport and auth headers" in describe_mcp_error(RuntimeError("misc"))
+
+
+def test_test_mcp_endpoint_surfaces_error_hint(authenticated_client: TestClient, monkeypatch):
+    client = authenticated_client
+    agent_id = _setup_agent(client)
+    unauthorized = httpx.HTTPStatusError(
+        "HTTP 401",
+        request=httpx.Request("POST", "https://mcp.example.test/mcp"),
+        response=httpx.Response(401),
+    )
+    monkeypatch.setattr(agent_tools_router, "discover_mcp_tools", AsyncMock(side_effect=unauthorized))
+    failed = client.post(f"/api/agents/{agent_id}/tools/test-mcp", json={"url": "https://mcp.example.test/mcp"})
+    assert failed.status_code == 502
+    assert "credentials (HTTP 401)" in failed.json()["detail"]
+
+
 def _http_tool_row(**overrides) -> AgentTool:
     row = AgentTool(
         type="http",
@@ -379,3 +424,31 @@ def test_conversation_uses_tools_end_to_end(authenticated_client: TestClient, mo
     assert assistant["tool_calls"][0]["name"] == "check_order"
     assert assistant["tool_calls"][0]["is_error"] is False
     assert len(llm_calls) == 2
+    # With tools active, the system prompt carries the no-fallback rule.
+    assert "do not answer from memory" in llm_calls[0]["payload"]["instructions"]
+
+
+def test_failed_tool_result_is_marked(monkeypatch):
+    """A failing tool feeds an explicit failure marker back to the model."""
+    specs = build_tool_specs([_http_tool_row()])
+    llm_calls: list[dict] = []
+    _patch_httpx(monkeypatch, ai_module, _ScriptedLLM([
+        {
+            "stop_reason": "tool_use",
+            "content": [{"type": "tool_use", "id": "toolu_1", "name": "check_order", "input": {"order_id": "42"}}],
+            "usage": {},
+        },
+        {"stop_reason": "end_turn", "content": [{"type": "text", "text": "That is unavailable right now."}], "usage": {}},
+    ], llm_calls))
+    _patch_httpx(monkeypatch, http_exec_module, _FakeToolEndpoint({}, status_code=301, body=""))
+    _allow_all_urls(monkeypatch)
+
+    completion = asyncio.run(anthropic_tool_loop(
+        "https://api.anthropic.test/v1", "key", "claude-opus-4-8",
+        [{"role": "user", "content": "Where is order 42?"}], specs, None, None,
+    ))
+    result_block = llm_calls[1]["payload"]["messages"][-1]["content"][0]
+    assert result_block["is_error"] is True
+    assert result_block["content"].startswith("Tool call failed: HTTP 301")
+    assert completion.tool_calls[0]["is_error"] is True
+    assert completion.tool_calls[0]["result_preview"].startswith("Tool call failed:")

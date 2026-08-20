@@ -19,8 +19,14 @@ RESULT_PREVIEW_CHARS = 500
 
 async def _execute(spec: ToolSpec, args: dict) -> tuple[str, bool]:
     if spec.mcp_tool_name is not None:
-        return await call_mcp_tool(spec.tool, spec.mcp_tool_name, args)
-    return await execute_http_tool(spec.tool, args)
+        result, is_error = await call_mcp_tool(spec.tool, spec.mcp_tool_name, args)
+    else:
+        result, is_error = await execute_http_tool(spec.tool, args)
+    if is_error:
+        # Unambiguous failure marker for both providers (the OpenAI item shape
+        # has no error flag) so the no-fallback rule in the system prompt kicks in.
+        result = f"Tool call failed: {result}"
+    return result, is_error
 
 
 def _record(metadata: list[dict], name: str, args: dict, result: str, is_error: bool) -> None:

@@ -15,6 +15,23 @@ from ..ai import Completion, chat_completion
 from .loop import anthropic_tool_loop, openai_tool_loop
 from .specs import build_tool_specs
 
+# Injected whenever the agent has tools: a failing tool must never be papered
+# over with the model's own knowledge.
+TOOL_FAILURE_RULE = (
+    "Tool usage rules: when the user's request depends on a tool and the tool call fails or returns an error, "
+    "do not answer from memory and do not invent data. Tell the user that the information or action is not "
+    "available right now and that they can try again later."
+)
+
+
+def _with_tool_rules(messages: list[dict]) -> list[dict]:
+    amended = list(messages)
+    for index, message in enumerate(amended):
+        if message["role"] == "system":
+            amended[index] = {**message, "content": f"{message['content']}\n\n{TOOL_FAILURE_RULE}"}
+            return amended
+    return [{"role": "system", "content": TOOL_FAILURE_RULE}, *amended]
+
 
 async def run_completion(
     db: Session,
@@ -31,6 +48,7 @@ async def run_completion(
     specs = build_tool_specs(list(rows))
     if not specs:
         return await chat_completion(agent.provider, base_url, api_key, model, messages, temperature=temperature, max_tokens=max_tokens)
+    messages = _with_tool_rules(messages)
     try:
         if agent.provider == "anthropic":
             return await anthropic_tool_loop(base_url, api_key, model, messages, specs, temperature, max_tokens)
