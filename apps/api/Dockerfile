@@ -6,8 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
-RUN groupadd --gid 10001 openlivery \
-    && useradd --uid 10001 --gid openlivery --create-home openlivery
+RUN groupadd --gid 10001 nexacore \
+    && useradd --uid 10001 --gid nexacore --create-home nexacore
 
 WORKDIR /app/backend
 
@@ -21,9 +21,9 @@ COPY app ./app
 COPY tests ./tests
 
 RUN mkdir -p /app/backend/storage \
-    && chown -R openlivery:openlivery /app
+    && chown -R nexacore:nexacore /app
 
-USER openlivery
+USER nexacore
 
 EXPOSE 8000
 

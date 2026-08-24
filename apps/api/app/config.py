@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]  # monorepo root (used for a sha
 
 class Settings(BaseSettings):
     app_name: str = "NexaCoreAgentManager API"
-    database_url: str = "postgresql+psycopg://openlivery:openlivery@localhost:5432/openlivery"
+    database_url: str = "postgresql+psycopg://nexacore:nexacore@localhost:5432/nexacore"
     secret_key: str = "dev-local-change-this-key-please"
     encryption_key: str = "dev-local-change-this-key-too"
     frontend_url: str = "http://localhost:3000"
