@@ -201,6 +201,11 @@ h1, h2, h3, .brand { font-family: inherit; }
 .brand { max-width: 206px; color: #15171a; font-size: 16px; font-weight: 650; letter-spacing: -.2px; }
 .brand > span:last-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .brand > img { width: 28px; height: 28px; object-fit: contain; border-radius: 6px; }
+.nexacore-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; flex-shrink: 0; }
+.nexacore-icon img { width: 100%; height: 100%; object-fit: contain; }
+.app-loader .nexacore-icon { width: 44px; height: 44px; }
+.access-brand .nexacore-icon { width: 32px; height: 32px; }
+.preview-logo.nexacore-icon { width: 24px; height: 24px; }
 .brand-mark { width: 28px; height: 28px; border-radius: 6px; background: var(--purple); box-shadow: none; }
 .quick-action { height: 40px; margin: 16px 4px 20px; padding: 0 12px; display: flex; align-items: center; gap: 9px; color: #353b4b; border: 1px solid #d8dde4; background: white; border-radius: 7px; box-shadow: var(--shadow); font-size: 14px; font-weight: 550; }
 .quick-action:hover { border-color: #aab2bf; background: #fafbfc; }
