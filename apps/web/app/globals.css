@@ -1,17 +1,17 @@
 :root {
-  --ink: #17213b;
+  --ink: #060B1C;
   --muted: #68718a;
   --subtle: #929ab0;
   --line: #e4e8f0;
   --surface: #ffffff;
   --canvas: #f6f7fb;
-  --navy: #17203a;
-  --purple: #6c5ce7;
-  --purple-dark: #5645ce;
-  --purple-soft: #efedff;
-  --green: #1ea672;
+  --navy: #0A1230;
+  --purple: #00BAFF;
+  --purple-dark: #0082BC;
+  --purple-soft: #E5F8FF;
+  --green: #3DDC97;
   --green-soft: #eaf8f2;
-  --red: #d95757;
+  --red: #FF6B81;
   --red-soft: #fff0f0;
   --amber: #d4932f;
   --shadow: 0 10px 30px rgba(27, 36, 68, .07);
@@ -178,18 +178,18 @@ input::placeholder, textarea::placeholder { color: #adb3c2; font-weight: 400; }
 
 /* 2026 redesign: agency interface inspired by Stripe clarity and density. */
 :root {
-  --ink: #1a1f36;
+  --ink: #060B1C;
   --muted: #596171;
   --subtle: #87909f;
   --line: #e3e8ee;
   --surface: #fff;
   --canvas: #f7f9fc;
-  --purple: #635bff;
-  --purple-dark: #4f46e5;
-  --purple-soft: #f0efff;
-  --green: #0e9272;
+  --purple: #00BAFF;
+  --purple-dark: #0082BC;
+  --purple-soft: #E5F8FF;
+  --green: #3DDC97;
   --green-soft: #e9f8f3;
-  --red: #c43d4b;
+  --red: #FF6B81;
   --red-soft: #fff0f1;
   --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 2px 8px rgba(16, 24, 40, .04);
 }
@@ -201,7 +201,7 @@ h1, h2, h3, .brand { font-family: inherit; }
 .brand { max-width: 206px; color: #15171a; font-size: 16px; font-weight: 650; letter-spacing: -.2px; }
 .brand > span:last-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .brand > img { width: 28px; height: 28px; object-fit: contain; border-radius: 6px; }
-.brand-mark { width: 28px; height: 28px; border-radius: 6px; background: #635bff; box-shadow: none; }
+.brand-mark { width: 28px; height: 28px; border-radius: 6px; background: var(--purple); box-shadow: none; }
 .quick-action { height: 40px; margin: 16px 4px 20px; padding: 0 12px; display: flex; align-items: center; gap: 9px; color: #353b4b; border: 1px solid #d8dde4; background: white; border-radius: 7px; box-shadow: var(--shadow); font-size: 14px; font-weight: 550; }
 .quick-action:hover { border-color: #aab2bf; background: #fafbfc; }
 .nav-label { padding: 0 10px 8px; color: #98a0ad; font-size: 11px; }

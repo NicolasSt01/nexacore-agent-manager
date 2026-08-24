@@ -8,9 +8,9 @@ import { LanguageProvider } from "@/lib/i18n";
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 
 export const metadata: Metadata = {
-  title: "OpenLivery — AI agents for your agency",
-  description: "Open source platform to build and manage AI agents.",
-  icons: { icon: "/brand/openlivery-logo-original.png", apple: "/brand/openlivery-logo-original.png" },
+  title: "NexaCoreAgentManager — AI agents for your agency",
+  description: "Platform to build and manage AI agents.",
+  icons: { icon: "/brand/nexacore-logo.png", apple: "/brand/nexacore-logo.png" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
