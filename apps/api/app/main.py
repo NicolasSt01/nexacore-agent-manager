@@ -1,7 +1,13 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select
 
 from .config import get_settings
+from .database import SessionLocal
+from .models import Agency, User
+from .security import hash_password
+from .slugs import unique_slug
 from .routers import (
     agency,
     agent_tools,
@@ -21,11 +27,50 @@ from .routers import (
 )
 
 
+def seed_superadmin():
+    db = SessionLocal()
+    try:
+        email = "admin@nexacore.com.mx"
+        user = db.scalar(select(User).where(User.email == email))
+        if not user:
+            agency = db.scalar(select(Agency).where(Agency.name == "NexaCore"))
+            if not agency:
+                agency = Agency(name="NexaCore", slug=unique_slug(db, Agency, "slug", "NexaCore"))
+                db.add(agency)
+                db.flush()
+            user = User(
+                agency_id=agency.id,
+                name="Admin NexaCore",
+                email=email,
+                password_hash=hash_password("prueba123"),
+                role="admin",
+            )
+            db.add(user)
+            db.commit()
+            print(f"✅ Initial superadmin user '{email}' created successfully.")
+        else:
+            user.password_hash = hash_password("prueba123")
+            db.commit()
+            print(f"✅ Superadmin password updated for '{email}'.")
+    except Exception as e:
+        db.rollback()
+        print(f"⚠️ Error seeding superadmin: {e}")
+    finally:
+        db.close()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    seed_superadmin()
+    yield
+
+
 settings = get_settings()
 app = FastAPI(
-    title="OpenLivery API",
+    title="NexaCoreAgentManager API",
     description="API to manage agencies, clients and AI agents.",
     version="0.3.0",
+    lifespan=lifespan,
 )
 app.add_middleware(
     CORSMiddleware,
