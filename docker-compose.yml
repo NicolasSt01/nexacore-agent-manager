@@ -5,7 +5,7 @@ services:
     image: postgres:17.6-alpine
     container_name: openlivery_db
     env_file:
-      - .env.docker
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/10-create-test-database.sh:/docker-entrypoint-initdb.d/10-create-test-database.sh:ro
@@ -26,7 +26,7 @@ services:
     image: ${OPENLIVERY_IMAGE_PREFIX:-ghcr.io/sarrazola/openlivery}-api:${OPENLIVERY_VERSION:-latest}
     container_name: openlivery_api
     env_file:
-      - .env.docker
+      - .env
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       TEST_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_TEST_DB}
@@ -77,7 +77,7 @@ services:
     image: ${OPENLIVERY_IMAGE_PREFIX:-ghcr.io/sarrazola/openlivery}-whatsapp:${OPENLIVERY_VERSION:-latest}
     container_name: openlivery_whatsapp
     env_file:
-      - .env.docker
+      - .env
     environment:
       BACKEND_URL: http://api:8000
       WHATSAPP_BRIDGE_HOST: 0.0.0.0
