@@ -37,7 +37,45 @@ export const PROVIDERS = [
       "claude-haiku-4-5",
     ],
   },
+  {
+    id: "openrouter",
+    label: "OpenRouter (DeepSeek / Qwen / Llama)",
+    keyPlaceholder: "sk-or-v1-...",
+    keyUrl: "https://openrouter.ai/keys",
+    models: [
+      "deepseek/deepseek-chat",
+      "deepseek/deepseek-r1",
+      "qwen/qwen-2.5-72b-instruct",
+      "meta-llama/llama-3.3-70b-instruct",
+      "google/gemini-2.0-flash-001",
+    ],
+  },
+  {
+    id: "opencode",
+    label: "OpenCode AI",
+    keyPlaceholder: "oc-...",
+    keyUrl: "https://opencode.ai",
+    models: [],
+  },
+  {
+    id: "deepseek",
+    label: "DeepSeek Direct",
+    keyPlaceholder: "sk-...",
+    keyUrl: "https://platform.deepseek.com/api_keys",
+    models: ["deepseek-chat", "deepseek-reasoner"],
+  },
+  {
+    id: "qwen",
+    label: "Qwen / DashScope",
+    keyPlaceholder: "sk-...",
+    keyUrl: "https://dashscope.console.aliyun.com",
+    models: ["qwen-max", "qwen-plus", "qwen-turbo", "qwen2.5-72b-instruct"],
+  },
 ] as const;
+
+// Providers whose endpoint is operator-configured (a gateway or a regional
+// host), so the settings form offers a base URL field for them.
+export const CUSTOM_ENDPOINT_PROVIDERS: readonly string[] = ["openrouter", "opencode", "deepseek", "qwen"];
 
 export type ProviderId = (typeof PROVIDERS)[number]["id"];
 

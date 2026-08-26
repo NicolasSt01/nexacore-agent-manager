@@ -133,6 +133,6 @@ async def widget_message(public_id: str, payload: WidgetMessageIn, db: Session =
 
     conversation.updated_at = now_utc()
     db.add(Message(conversation_id=conversation.id, role="assistant", content=completion.text, sources=knowledge.sources, tool_calls=completion.tool_calls, sender_type="ai", sender_name=agent.name))
-    record_usage(db, agent.agency_id, agent.id, agent.provider, agent.model.strip(), completion)
+    record_usage(db, agent.agency_id, agent.client_id, agent.id, agent.provider, agent.model.strip(), completion, source="widget")
     db.commit()
     return {"mode": "ai", "reply": completion.text, "messages": []}

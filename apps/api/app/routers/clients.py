@@ -5,10 +5,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
-from ..deps import get_current_user
-from ..models import Client, User, new_domain_token
-from ..schemas import ClientCreate, ClientDomainOut, ClientDomainSet, ClientOut, ClientPortalUpdate, ClientUpdate
+from ..deps import get_current_user, is_superadmin, require_superadmin
+from ..models import Client, User, new_domain_token, now_utc
+from ..schemas import (
+    ClientCreate,
+    ClientDomainOut,
+    ClientDomainSet,
+    ClientOut,
+    ClientOwnerUpdate,
+    ClientPortalUpdate,
+    ClientUpdate,
+)
 from ..security import hash_password
+from ..services import billing as billing_service
 from ..services import dns as dns_service
 from ..slugs import slugify, unique_slug
 
@@ -27,42 +36,86 @@ def _domain_out(client: Client) -> ClientDomainOut:
     )
 
 
+def _enrich_client_out(db: Session, client: Client) -> ClientOut:
+    """Attach the live quota status, which is derived per request rather than
+    stored on the client row."""
+    quota = billing_service.get_quota_status(db, client)
+    out = ClientOut.model_validate(client)
+    out.used_tokens_current_cycle = quota["used_tokens"]
+    out.percentage_tokens_used = quota["percentage_used"]
+    out.is_blocked = quota["is_blocked"]
+    out.cycle_start = quota["cycle_start"]
+    out.cycle_end = quota["cycle_end"]
+    return out
+
+
+def _scope(stmt, user: User):
+    """Restrict a Client select to what the user may see: the whole agency for a
+    superadmin, only their own portfolio for a seller."""
+    stmt = stmt.where(Client.agency_id == user.agency_id)
+    if not is_superadmin(user):
+        stmt = stmt.where(Client.created_by_user_id == user.id)
+    return stmt
+
+
 def _client(db: Session, user: User, client_id: uuid.UUID) -> Client:
-    client = db.scalar(
-        select(Client)
-        .options(selectinload(Client.agents))
-        .where(Client.id == client_id, Client.agency_id == user.agency_id)
-    )
+    stmt = _scope(select(Client).options(selectinload(Client.agents)).where(Client.id == client_id), user)
+    client = db.scalar(stmt)
     if not client:
+        # 404 rather than 403 on another seller's client: a 403 would confirm
+        # the client exists and leak the size and shape of their portfolio.
         raise HTTPException(status_code=404, detail="Client not found")
     return client
 
 
 @router.get("", response_model=list[ClientOut])
 def list_clients(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return db.scalars(
-        select(Client)
-        .options(selectinload(Client.agents))
-        .where(Client.agency_id == user.agency_id)
-        .order_by(Client.created_at.desc())
-    ).all()
+    stmt = _scope(select(Client).options(selectinload(Client.agents)), user)
+    clients = db.scalars(stmt.order_by(Client.created_at.desc())).all()
+    return [_enrich_client_out(db, client) for client in clients]
 
 
 @router.post("", response_model=ClientOut, status_code=status.HTTP_201_CREATED)
 def create_client(payload: ClientCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    now = now_utc()
     client = Client(
         agency_id=user.agency_id,
+        # Ownership always comes from the session, never from the payload.
+        created_by_user_id=user.id,
         portal_slug=unique_slug(db, Client, "portal_slug", payload.name),
+        # The billing cycle cuts on the signup day: registered on the 12th,
+        # cuts on the 12th of every month.
+        billing_anchor_day=now.day,
         **payload.model_dump(),
     )
     db.add(client)
     db.commit()
-    return _client(db, user, client.id)
+    return _enrich_client_out(db, _client(db, user, client.id))
+
+
+@router.patch("/{client_id}/owner", response_model=ClientOut)
+def reassign_client(
+    client_id: uuid.UUID,
+    payload: ClientOwnerUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_superadmin),
+):
+    """Move a client to another seller. Superadmin only — a seller must not be
+    able to hand a client over to, or take one from, a colleague."""
+    client = _client(db, user, client_id)
+    owner = db.scalar(
+        select(User).where(User.id == payload.owner_user_id, User.agency_id == user.agency_id)
+    )
+    if not owner:
+        raise HTTPException(status_code=404, detail="User not found in this agency")
+    client.created_by_user_id = owner.id
+    db.commit()
+    return _enrich_client_out(db, _client(db, user, client_id))
 
 
 @router.get("/{client_id}", response_model=ClientOut)
 def get_client(client_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return _client(db, user, client_id)
+    return _enrich_client_out(db, _client(db, user, client_id))
 
 
 @router.patch("/{client_id}", response_model=ClientOut)
@@ -71,7 +124,7 @@ def update_client(client_id: uuid.UUID, payload: ClientUpdate, db: Session = Dep
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(client, key, value)
     db.commit()
-    return _client(db, user, client_id)
+    return _enrich_client_out(db, _client(db, user, client_id))
 
 
 @router.patch("/{client_id}/portal", response_model=ClientOut)
@@ -99,7 +152,7 @@ def update_client_portal(
     if client.portal_enabled and (not client.portal_email or not client.portal_password_hash):
         raise HTTPException(status_code=400, detail="Set an email and a password before enabling the portal")
     db.commit()
-    return _client(db, user, client_id)
+    return _enrich_client_out(db, _client(db, user, client_id))
 
 
 @router.get("/{client_id}/domain", response_model=ClientDomainOut)

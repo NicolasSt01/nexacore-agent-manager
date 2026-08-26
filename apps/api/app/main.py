@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 from .config import get_settings
-from .database import SessionLocal
+from .database import Base, SessionLocal, engine
 from .models import Agency, User
 from .security import hash_password
 from .slugs import unique_slug
@@ -18,6 +18,8 @@ from .routers import (
     conversations,
     dashboard,
     domains,
+    meta_channels,
+    meta_webhook,
     portal,
     providers,
     whatsapp,
@@ -28,6 +30,7 @@ from .routers import (
 
 
 def seed_superadmin():
+    Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
         email = "admin@nexacore.com.mx"
@@ -43,15 +46,16 @@ def seed_superadmin():
                 name="Admin NexaCore",
                 email=email,
                 password_hash=hash_password("prueba123"),
-                role="admin",
+                role="superadmin",
             )
             db.add(user)
             db.commit()
             print(f"✅ Initial superadmin user '{email}' created successfully.")
         else:
+            user.role = "superadmin"
             user.password_hash = hash_password("prueba123")
             db.commit()
-            print(f"✅ Superadmin password updated for '{email}'.")
+            print(f"✅ Superadmin password and role updated for '{email}'.")
     except Exception as e:
         db.rollback()
         print(f"⚠️ Error seeding superadmin: {e}")
@@ -103,5 +107,7 @@ app.include_router(whatsapp.router, prefix="/api")
 app.include_router(whatsapp.internal_router, prefix="/api")
 app.include_router(whatsapp_cloud.router, prefix="/api")
 app.include_router(whatsapp_cloud_webhook.public_router, prefix="/api")
+app.include_router(meta_channels.router, prefix="/api")
+app.include_router(meta_webhook.public_router, prefix="/api")
 app.include_router(widget.router, prefix="/api")
 app.include_router(domains.public_router, prefix="/api")

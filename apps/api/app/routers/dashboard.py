@@ -1,13 +1,14 @@
 from datetime import timedelta
+from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import get_current_user
+from ..deps import get_current_user, require_superadmin
 from ..models import Agent, Client, Conversation, Message, UsageRecord, User, WhatsAppChannel, now_utc
-from ..schemas import DashboardMetrics, DashboardOut
+from ..schemas import DashboardMetrics, DashboardOut, FinanceDashboardOut
 
 
 router = APIRouter(prefix="/dashboard", tags=["Inicio"])
@@ -130,4 +131,52 @@ def dashboard_metrics(
         "tokens_in": int(tokens_in),
         "tokens_out": int(tokens_out),
         "usage_by_model": usage_by_model,
+    }
+
+
+@router.get("/finance", response_model=FinanceDashboardOut)
+def finance_dashboard(db: Session = Depends(get_db), user: User = Depends(require_superadmin)):
+    """Projected revenue per seller and per agency.
+
+    Revenue is a projection of the recurring fees of active clients; NexaCore's
+    accounting team owns invoicing and payment records, so nothing here claims
+    an amount was actually collected.
+    """
+    agency_id = user.agency_id
+    clients = db.scalars(select(Client).where(Client.agency_id == agency_id, Client.is_active.is_(True))).all()
+
+    def revenue(rows) -> Decimal:
+        # BYOK clients pay a flat platform fee too, so every billing mode counts.
+        return sum((row.monthly_fee_mxn for row in rows), Decimal("0"))
+
+    # Tokens per client, in one grouped query rather than one query per seller.
+    tokens_by_client = dict(
+        db.execute(
+            select(
+                UsageRecord.client_id,
+                func.coalesce(func.sum(UsageRecord.input_tokens + UsageRecord.output_tokens), 0),
+            )
+            .where(UsageRecord.agency_id == agency_id)
+            .group_by(UsageRecord.client_id)
+        ).all()
+    )
+
+    workers = db.scalars(select(User).where(User.agency_id == agency_id).order_by(User.created_at.asc())).all()
+    workers_metrics = []
+    for worker in workers:
+        owned = [client for client in clients if client.created_by_user_id == worker.id]
+        workers_metrics.append({
+            "worker_id": worker.id,
+            "worker_name": worker.name,
+            "worker_email": worker.email,
+            "clients_count": len(owned),
+            "monthly_revenue_mxn": float(revenue(owned)),
+            "tokens_consumed": sum(int(tokens_by_client.get(client.id, 0)) for client in owned),
+        })
+
+    return {
+        "total_clients": len(clients),
+        "total_monthly_revenue_mxn": float(revenue(clients)),
+        "total_tokens_consumed": sum(int(value) for value in tokens_by_client.values()),
+        "workers_metrics": workers_metrics,
     }

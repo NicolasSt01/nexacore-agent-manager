@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import get_current_user
+from ..deps import get_current_user, require_superadmin
 from ..models import ProviderCredential, User
 from ..schemas import ProviderKeyUpdate, ProviderOut
 from ..security import decrypt_secret, encrypt_secret, mask_secret
@@ -34,6 +34,7 @@ def _out(provider: str, credential: ProviderCredential | None) -> dict:
         "label": PROVIDERS[provider]["label"],
         "configured": credential is not None,
         "api_key_masked": mask_secret(decrypt_secret(credential.encrypted_api_key)) if credential else "",
+        "base_url": credential.base_url if credential and credential.base_url else PROVIDERS[provider]["base_url"],
     }
 
 
@@ -46,20 +47,27 @@ def list_providers(db: Session = Depends(get_db), user: User = Depends(get_curre
 
 
 @router.put("/{provider}", response_model=ProviderOut)
-def set_provider_key(provider: str, payload: ProviderKeyUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def set_provider_key(provider: str, payload: ProviderKeyUpdate, db: Session = Depends(get_db), user: User = Depends(require_superadmin)):
     _require_provider(provider)
     credential = _credential(db, user, provider)
     if credential:
         credential.encrypted_api_key = encrypt_secret(payload.api_key)
+        if payload.base_url:
+            credential.base_url = payload.base_url.strip()
     else:
-        credential = ProviderCredential(agency_id=user.agency_id, provider=provider, encrypted_api_key=encrypt_secret(payload.api_key))
+        credential = ProviderCredential(
+            agency_id=user.agency_id,
+            provider=provider,
+            encrypted_api_key=encrypt_secret(payload.api_key),
+            base_url=payload.base_url.strip() if payload.base_url else None,
+        )
         db.add(credential)
     db.commit()
     return _out(provider, credential)
 
 
 @router.delete("/{provider}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_provider_key(provider: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def delete_provider_key(provider: str, db: Session = Depends(get_db), user: User = Depends(require_superadmin)):
     _require_provider(provider)
     credential = _credential(db, user, provider)
     if credential:
@@ -69,16 +77,18 @@ def delete_provider_key(provider: str, db: Session = Depends(get_db), user: User
 
 
 @router.post("/{provider}/test")
-async def test_provider_key(provider: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+async def test_provider_key(provider: str, db: Session = Depends(get_db), user: User = Depends(require_superadmin)):
     _require_provider(provider)
     credential = _credential(db, user, provider)
     if not credential:
         raise HTTPException(status_code=400, detail="No API key configured for this provider")
-    return await test_provider(provider, base_url_for(provider), decrypt_secret(credential.encrypted_api_key))
+    # Test the endpoint that will actually be used, not the provider default:
+    # a gateway key validated against api.openai.com proves nothing.
+    return await test_provider(provider, credential.base_url or base_url_for(provider), decrypt_secret(credential.encrypted_api_key))
 
 
 @router.post("/{provider}/validate")
-async def validate_provider_key(provider: str, payload: ProviderKeyUpdate, user: User = Depends(get_current_user)):
+async def validate_provider_key(provider: str, payload: ProviderKeyUpdate, user: User = Depends(require_superadmin)):
     """Verify a raw key against the provider before it is stored."""
     _require_provider(provider)
-    return await test_provider(provider, base_url_for(provider), payload.api_key)
+    return await test_provider(provider, (payload.base_url or "").strip() or base_url_for(provider), payload.api_key)

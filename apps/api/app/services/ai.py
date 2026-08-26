@@ -31,12 +31,16 @@ async def chat_completion(
     temperature: float | None = None,
     max_tokens: int | None = None,
 ) -> Completion:
-    """Generate a reply using the provider's modern chat API: the OpenAI
-    Responses API, or the Anthropic Messages API."""
+    """Generate a reply using the provider's API."""
     try:
         if provider == "anthropic":
             return await _anthropic_messages(base_url, api_key, model, messages, temperature, max_tokens)
-        return await _openai_responses(base_url, api_key, model, messages, temperature, max_tokens)
+        if provider in ("openrouter", "deepseek", "qwen", "opencode"):
+            return await _openai_chat_completions(base_url, api_key, model, messages, temperature, max_tokens)
+        try:
+            return await _openai_responses(base_url, api_key, model, messages, temperature, max_tokens)
+        except Exception:
+            return await _openai_chat_completions(base_url, api_key, model, messages, temperature, max_tokens)
     except HTTPException:
         raise
     except (httpx.HTTPError, KeyError, ValueError, IndexError) as exc:
@@ -44,6 +48,30 @@ async def chat_completion(
             status_code=502,
             detail="Could not get a valid response from the AI provider. Check the API key and the model.",
         ) from exc
+
+
+async def _openai_chat_completions(base_url, api_key, model, messages, temperature, max_tokens) -> Completion:
+    url = f"{base_url.rstrip('/')}/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    base_payload: dict = {"model": model, "messages": messages}
+    sampling: dict = {}
+    if temperature is not None:
+        sampling["temperature"] = temperature
+    if max_tokens is not None:
+        sampling["max_tokens"] = max_tokens
+    data = await _post_json(url, headers, base_payload, sampling)
+    choices = data.get("choices") or []
+    text = ""
+    if choices and isinstance(choices, list):
+        text = choices[0].get("message", {}).get("content", "").strip()
+    if not text:
+        raise ValueError("empty response")
+    usage = data.get("usage") or {}
+    return Completion(
+        text=text,
+        input_tokens=int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0),
+        output_tokens=int(usage.get("completion_tokens") or usage.get("output_tokens") or 0),
+    )
 
 
 async def _openai_responses(base_url, api_key, model, messages, temperature, max_tokens) -> Completion:

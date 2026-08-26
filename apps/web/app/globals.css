@@ -1043,3 +1043,21 @@ input:focus, textarea:focus, select:focus { border-color: #3b8ca0; box-shadow: 0
 .tool-error-details { margin-top: 4px; display: flex; flex-direction: column; gap: 3px; }
 .tool-error-details small { display: inline-flex; align-items: baseline; gap: 5px; padding: 6px 9px; color: #9b2c2c; background: var(--red-soft); border: 1px solid #f0c3c3; border-radius: 7px; font-size: 11px; line-height: 1.5; word-break: break-word; }
 .tool-error-details small svg { flex: 0 0 auto; align-self: center; }
+
+/* --- Billing: token usage bar and plan presets --- */
+.usage-bar { margin: 0 0 21px; padding: 17px 19px; border: 1px solid var(--line); border-radius: 14px; background: white; box-shadow: 0 3px 13px rgba(35,42,72,.025); }
+.usage-bar-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.usage-bar-head strong { font-size: 13px; }
+.usage-bar-head span { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.usage-track { height: 8px; margin: 11px 0 9px; border-radius: 99px; background: #edf0f3; overflow: hidden; }
+.usage-fill { height: 100%; border-radius: 99px; background: #1c9c6d; transition: width .3s ease; }
+.usage-warning .usage-fill { background: #cb8a27; }
+.usage-danger .usage-fill { background: #d0483f; }
+.usage-bar-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: var(--subtle); font-size: 12px; }
+.usage-warning .usage-bar-foot span { color: #a8701d; font-weight: 650; }
+.usage-danger .usage-bar-foot span { color: #b93a32; font-weight: 650; }
+.preset-row { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.preset-label { color: var(--muted); font-size: 12px; font-weight: 650; }
+.preset-row .button { padding: 6px 12px; font-size: 12px; }
+.muted-block { display: block; color: var(--subtle); font-size: 12px; }
+.table-wrap { border: 1px solid var(--line); border-radius: 14px; background: white; overflow-x: auto; }

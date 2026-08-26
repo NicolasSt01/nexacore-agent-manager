@@ -1,7 +1,15 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+from .services.providers import SUPPORTED
+
+
+# Built from the supported provider registry so adding a provider in one place
+# is enough; a hard-coded pattern silently rejects every new one.
+PROVIDER_PATTERN = rf"^({'|'.join(SUPPORTED)})$"
 
 
 class ORMModel(BaseModel):
@@ -48,9 +56,15 @@ class ClientBase(BaseModel):
     description: str = ""
     general_context: str = ""
     is_active: bool = True
+    billing_mode: str = Field(default="plan", pattern=r"^(plan|pay_as_you_go|byok)$")
+    monthly_fee_mxn: Decimal = Field(default=Decimal("200.00"), ge=0, max_digits=10, decimal_places=2)
+    monthly_token_limit: int = Field(default=500000, ge=0)
 
 
 class ClientCreate(ClientBase):
+    # created_by_user_id is deliberately NOT accepted from the request: it is
+    # the portfolio isolation key, and a seller must not be able to attribute a
+    # client to somebody else. It is always taken from the session.
     pass
 
 
@@ -60,6 +74,11 @@ class ClientUpdate(BaseModel):
     description: str | None = None
     general_context: str | None = None
     is_active: bool | None = None
+    # Reassigning a client to another seller is a superadmin action; see the
+    # dedicated endpoint in routers/clients.py rather than a generic PATCH.
+    billing_mode: str | None = Field(default=None, pattern=r"^(plan|pay_as_you_go|byok)$")
+    monthly_fee_mxn: Decimal | None = Field(default=None, ge=0, max_digits=10, decimal_places=2)
+    monthly_token_limit: int | None = Field(default=None, ge=0)
 
 
 class ClientPortalUpdate(BaseModel):
@@ -91,14 +110,24 @@ class ClientOut(ORMModel):
     portal_password_configured: bool
     portal_domain: str | None
     portal_domain_verified: bool
+    created_by_user_id: uuid.UUID | None = None
+    billing_mode: str = "plan"
+    monthly_fee_mxn: Decimal = Decimal("200.00")
+    monthly_token_limit: int = 500000
+    billing_anchor_day: int = 1
+    # Derived per request from usage_records over the current cycle window;
+    # not stored on the client. See services/billing.get_quota_status.
+    used_tokens_current_cycle: int = 0
+    percentage_tokens_used: float = 0.0
+    is_blocked: bool = False
+    cycle_start: datetime | None = None
+    cycle_end: datetime | None = None
     created_at: datetime
     updated_at: datetime
     agents: list[AgentSummary] = []
 
 
 class ClientDomainSet(BaseModel):
-    # A DNS hostname, e.g. "chat.brand.com". Lowercased and validated as a host.
-    # No look-around: pydantic v2's regex engine does not support it.
     domain: str = Field(
         min_length=3,
         max_length=255,
@@ -109,13 +138,13 @@ class ClientDomainSet(BaseModel):
 class ClientDomainOut(BaseModel):
     domain: str | None
     verified: bool
-    # DNS records the operator/client must create.
     txt_host: str | None
     txt_value: str | None
 
 
 class ProviderKeyUpdate(BaseModel):
     api_key: str = Field(min_length=1)
+    base_url: str | None = None
 
 
 class ProviderOut(BaseModel):
@@ -123,6 +152,42 @@ class ProviderOut(BaseModel):
     label: str
     configured: bool
     api_key_masked: str = ""
+    base_url: str | None = None
+
+
+class AgencyUserCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    role: str = Field(default="seller", pattern=r"^(seller|superadmin)$")
+
+
+class AgencyUserOut(ORMModel):
+    id: uuid.UUID
+    name: str
+    email: EmailStr
+    role: str
+    created_at: datetime
+
+
+class ClientOwnerUpdate(BaseModel):
+    owner_user_id: uuid.UUID
+
+
+class WorkerMetrics(BaseModel):
+    worker_id: uuid.UUID
+    worker_name: str
+    worker_email: str
+    clients_count: int
+    monthly_revenue_mxn: float
+    tokens_consumed: int
+
+
+class FinanceDashboardOut(BaseModel):
+    total_clients: int
+    total_monthly_revenue_mxn: float
+    total_tokens_consumed: int
+    workers_metrics: list[WorkerMetrics]
 
 
 class AgentBase(BaseModel):
@@ -139,7 +204,7 @@ class AgentBase(BaseModel):
     brief_dos: str = ""
     brief_donts: str = ""
     model: str = ""
-    provider: str = Field(default="openai", pattern=r"^(openai|anthropic)$")
+    provider: str = Field(default="openai", pattern=PROVIDER_PATTERN)
     timezone: str = Field(default="UTC", max_length=64)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=2048, ge=1, le=32000)
@@ -173,7 +238,7 @@ class AgentUpdate(BaseModel):
     brief_dos: str | None = None
     brief_donts: str | None = None
     model: str | None = None
-    provider: str | None = Field(default=None, pattern=r"^(openai|anthropic)$")
+    provider: str | None = Field(default=None, pattern=PROVIDER_PATTERN)
     timezone: str | None = Field(default=None, max_length=64)
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     max_tokens: int | None = Field(default=None, ge=1, le=32000)

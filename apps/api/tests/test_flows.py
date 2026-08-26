@@ -96,8 +96,11 @@ def test_provider_key_is_stored_masked(authenticated_client: TestClient):
     assert "encrypted_api_key" not in saved.json()
 
     listed = authenticated_client.get("/api/providers").json()
-    assert {p["provider"] for p in listed} == {"openai", "anthropic"}
+    # Every supported provider is listed; asserting a superset keeps this test
+    # about masking rather than about which providers happen to be supported.
+    assert {"openai", "anthropic"} <= {p["provider"] for p in listed}
     assert next(p for p in listed if p["provider"] == "openai")["configured"] is True
+    assert all(p["configured"] is False for p in listed if p["provider"] != "openai")
 
 
 def test_main_crud_knowledge_and_persistent_chat(authenticated_client: TestClient, monkeypatch):

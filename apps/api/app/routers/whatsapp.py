@@ -237,6 +237,8 @@ async def inbound_message(channel_id: uuid.UUID, payload: WhatsAppInbound, db: S
         ),
         conversation_channel="whatsapp",
         channel_fk_field="whatsapp_channel_id",
+        usage_source="whatsapp",
+        default_sender_name="WhatsApp contact",
     )
     return asdict(result)
 

@@ -1,9 +1,10 @@
-"""Channel-agnostic inbound WhatsApp pipeline.
+"""Channel-agnostic inbound message pipeline.
 
-Shared by the Baileys bridge endpoint and the Cloud API webhook: dedupe by
-external message id, find or create the conversation, resolve media into text,
-store the visitor message, and produce the AI reply unless a human operator has
-taken over. The caller is responsible for actually delivering the reply.
+Shared by the Baileys bridge endpoint, the WhatsApp Cloud webhook and the Meta
+Messenger/Instagram webhook: dedupe by external message id, find or create the
+conversation, resolve media into text, store the visitor message, and produce
+the AI reply unless a human operator has taken over. The caller is responsible
+for actually delivering the reply.
 """
 
 import uuid
@@ -30,6 +31,9 @@ class InboundMessage:
     media_kind: str | None = None
     media_bytes: bytes | None = None
     media_mime: str | None = None
+    # Pre-signed attachment URL, when the channel delivers one instead of a
+    # media id the caller has to resolve (Messenger/Instagram do).
+    media_url: str | None = None
 
 
 @dataclass
@@ -84,12 +88,15 @@ async def process_inbound(
     *,
     conversation_channel: str,
     channel_fk_field: str,
+    usage_source: str | None = None,
+    default_sender_name: str = "Contact",
 ) -> InboundResult:
     """Run the shared pipeline for one inbound message.
 
-    ``channel`` is a WhatsAppChannel or WhatsAppCloudChannel; both expose the
-    same fields used here. ``conversation_channel`` and ``channel_fk_field``
-    select the Conversation channel label and FK column for the caller.
+    ``channel`` is any channel model exposing agency_id/client_id/agent_id,
+    agent, is_enabled and last_error. ``conversation_channel`` and
+    ``channel_fk_field`` select the Conversation channel label and FK column;
+    ``usage_source`` tags the usage record (defaults to the channel label).
     """
     fk_column = getattr(Conversation, channel_fk_field)
 
@@ -135,7 +142,7 @@ async def process_inbound(
         role="user",
         content=content,
         sender_type="visitor",
-        sender_name=inbound.sender_name or "WhatsApp contact",
+        sender_name=inbound.sender_name or default_sender_name,
         external_message_id=inbound.external_message_id,
     )
     conversation.updated_at = now_utc()
@@ -191,7 +198,7 @@ async def process_inbound(
         sender_type="ai",
         sender_name=agent.name,
     )
-    record_usage(db, agent.agency_id, agent.id, agent.provider, agent.model.strip(), completion)
+    record_usage(db, agent.agency_id, agent.client_id, agent.id, agent.provider, agent.model.strip(), completion, source=usage_source or conversation_channel)
     conversation.updated_at = now_utc()
     channel.last_error = None
     db.add(outbound)

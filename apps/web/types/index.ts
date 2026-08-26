@@ -24,6 +24,19 @@ export type Client = {
   portal_password_configured: boolean;
   portal_domain: string | null;
   portal_domain_verified: boolean;
+  // Billing. `created_by_user_id` is the seller who registered the client and
+  // is the portfolio isolation key; it is set server-side, never sent.
+  created_by_user_id: string | null;
+  billing_mode: BillingMode;
+  monthly_fee_mxn: string;
+  monthly_token_limit: number;
+  billing_anchor_day: number;
+  // Derived per request from usage records over the current cycle.
+  used_tokens_current_cycle: number;
+  percentage_tokens_used: number;
+  is_blocked: boolean;
+  cycle_start: string | null;
+  cycle_end: string | null;
   agents: AgentSummary[];
   created_at: string;
   updated_at: string;
@@ -77,6 +90,34 @@ export type Provider = {
   label: string;
   configured: boolean;
   api_key_masked: string;
+  // Effective endpoint: the stored override, or the provider default.
+  base_url: string | null;
+};
+
+export type BillingMode = "plan" | "pay_as_you_go" | "byok";
+
+export type AgencyUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  created_at: string;
+};
+
+export type SellerMetrics = {
+  worker_id: string;
+  worker_name: string;
+  worker_email: string;
+  clients_count: number;
+  monthly_revenue_mxn: number;
+  tokens_consumed: number;
+};
+
+export type FinanceDashboard = {
+  total_clients: number;
+  total_monthly_revenue_mxn: number;
+  total_tokens_consumed: number;
+  workers_metrics: SellerMetrics[];
 };
 
 export type ProviderTest = { ok: boolean; message: string; models: string[] };
@@ -173,6 +214,29 @@ export type WhatsAppCloudChannel = {
   display_name: string | null;
   phone_number_id: string;
   waba_id: string | null;
+  has_access_token: boolean;
+  has_app_secret: boolean;
+  webhook_url: string;
+  webhook_verify_token: string;
+  last_error: string | null;
+  is_enabled: boolean;
+  last_connected_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Facebook Messenger and Instagram Direct share one channel shape. */
+export type MetaPlatform = "messenger" | "instagram";
+
+export type MetaChannel = {
+  id: string;
+  client_id: string;
+  agent_id: string;
+  platform: MetaPlatform;
+  status: "disconnected" | "connected" | "error";
+  // Page id for Messenger, Instagram user id for Instagram.
+  account_id: string;
+  account_name: string | null;
   has_access_token: boolean;
   has_app_secret: boolean;
   webhook_url: string;

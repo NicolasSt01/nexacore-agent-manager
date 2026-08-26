@@ -30,3 +30,14 @@ internal/
 
 # Local-only Claude context (never committed)
 CLAUDE.local.md
+
+deploy.py
+
+# Local SQLite scratch databases (production is PostgreSQL via Alembic)
+*.db
+*.db.bak-*
+
+# Playwright
+/node_modules/
+/test-results/
+/playwright-report/

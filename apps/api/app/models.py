@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, LargeBinary, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -61,6 +62,7 @@ class Client(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
     agency_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agencies.id", ondelete="CASCADE"), index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(180), index=True)
     industry: Mapped[str] = mapped_column(String(160), default="")
     description: Mapped[str] = mapped_column(Text, default="")
@@ -76,15 +78,31 @@ class Client(Base):
     portal_domain: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     portal_domain_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     portal_domain_token: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    
+    # Financial & Token billing configuration
+    billing_mode: Mapped[str] = mapped_column(String(30), default="plan", server_default="plan")  # "plan", "pay_as_you_go", "byok"
+    # Money is stored as Numeric, never Float: binary floats cannot represent
+    # decimal amounts exactly and the error accumulates across aggregations.
+    monthly_fee_mxn: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("200.00"), server_default="200.00")
+    monthly_token_limit: Mapped[int] = mapped_column(Integer, default=500000, server_default="500000")  # 0 for unlimited
+    # Cycle cut day, taken from the signup date: a client registered on the 12th
+    # cuts on the 12th of every month. See services/billing.cycle_window.
+    billing_anchor_day: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    encrypted_client_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
+    created_by_user: Mapped["User | None"] = relationship(foreign_keys=[created_by_user_id])
     agents: Mapped[list["Agent"]] = relationship(back_populates="client", cascade="all, delete-orphan")
     whatsapp_channel: Mapped["WhatsAppChannel | None"] = relationship(
         back_populates="client", cascade="all, delete-orphan", uselist=False
     )
     whatsapp_cloud_channel: Mapped["WhatsAppCloudChannel | None"] = relationship(
         back_populates="client", cascade="all, delete-orphan", uselist=False
+    )
+    meta_channels: Mapped[list["MetaMessagingChannel"]] = relationship(
+        back_populates="client", cascade="all, delete-orphan"
     )
 
     @property
@@ -94,7 +112,7 @@ class Client(Base):
 
 class ProviderCredential(Base):
     """One AI provider API key per agency (bring your own key). provider is
-    "openai" or "anthropic"; the base URL is resolved from the provider."""
+    "openai", "anthropic", "openrouter", "deepseek", etc. base_url overrides default."""
 
     __tablename__ = "provider_credentials"
     __table_args__ = (UniqueConstraint("agency_id", "provider", name="uq_provider_credentials_agency_provider"),)
@@ -103,6 +121,7 @@ class ProviderCredential(Base):
     agency_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agencies.id", ondelete="CASCADE"), index=True)
     provider: Mapped[str] = mapped_column(String(30))
     encrypted_api_key: Mapped[str] = mapped_column(Text)
+    base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
@@ -161,6 +180,7 @@ class Agent(Base):
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="agent", cascade="all, delete-orphan")
     whatsapp_channels: Mapped[list["WhatsAppChannel"]] = relationship(back_populates="agent")
     whatsapp_cloud_channels: Mapped[list["WhatsAppCloudChannel"]] = relationship(back_populates="agent")
+    meta_channels: Mapped[list["MetaMessagingChannel"]] = relationship(back_populates="agent")
     tools: Mapped[list["AgentTool"]] = relationship(back_populates="agent", cascade="all, delete-orphan", order_by="AgentTool.created_at")
 
 
@@ -255,6 +275,45 @@ class WhatsAppCloudChannel(Base):
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="whatsapp_cloud_channel")
 
 
+class MetaMessagingChannel(Base):
+    """Facebook Messenger / Instagram Direct channel (Meta Messenger Platform).
+
+    Both platforms speak the same webhook shape and the same Send API, differing
+    only in the object type and the id the messages are posted to, so one table
+    with a `platform` discriminator avoids duplicating the whole flow. A client
+    can have one channel per platform. Credentials are provided manually (bring
+    your own Meta app), like the WhatsApp Cloud channel.
+    """
+
+    __tablename__ = "meta_messaging_channels"
+    __table_args__ = (UniqueConstraint("client_id", "platform", name="uq_meta_channels_client_platform"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    agency_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agencies.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    agent_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agents.id", ondelete="RESTRICT"), index=True)
+    # "messenger" (a Facebook Page) or "instagram" (an IG professional account).
+    platform: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(30), default="disconnected")
+    # Page id for Messenger, Instagram user id for Instagram: the id inbound
+    # messages are addressed to and outbound ones are posted to.
+    account_id: Mapped[str] = mapped_column(String(80), default="", server_default="")
+    account_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    encrypted_access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    encrypted_app_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Pasted into the Meta app's webhook config, so it must stay re-displayable.
+    webhook_verify_token: Mapped[str] = mapped_column(String(64), default=new_public_id, server_default="")
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    client: Mapped[Client] = relationship(back_populates="meta_channels")
+    agent: Mapped[Agent] = relationship(back_populates="meta_channels")
+    conversations: Mapped[list["Conversation"]] = relationship(back_populates="meta_channel")
+
+
 class AgentQA(Base):
     __tablename__ = "agent_qa"
 
@@ -302,14 +361,23 @@ class KnowledgeChunk(Base):
 
 class UsageRecord(Base):
     __tablename__ = "usage_records"
+    # Every quota check and every finance query aggregates a client's tokens
+    # over a billing window; this index is what keeps that a cheap lookup.
+    __table_args__ = (Index("ix_usage_records_client_created", "client_id", "created_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
     agency_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agencies.id", ondelete="CASCADE"), index=True)
+    # Denormalized on purpose: agent_id is SET NULL on delete, so attribution
+    # would be lost with the agent. Billing history must outlive the agent.
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
     agent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"), nullable=True, index=True)
     provider: Mapped[str] = mapped_column(String(30))
     model: Mapped[str] = mapped_column(String(180))
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    # Entry point that produced the usage: "whatsapp", "widget", "portal" or
+    # "playground". Internal playground testing must not consume client quota.
+    source: Mapped[str] = mapped_column(String(20), default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, index=True)
 
 
@@ -320,6 +388,7 @@ class Conversation(Base):
         UniqueConstraint(
             "whatsapp_cloud_channel_id", "external_chat_id", name="uq_conversations_whatsapp_cloud_chat"
         ),
+        UniqueConstraint("meta_channel_id", "external_chat_id", name="uq_conversations_meta_chat"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
@@ -335,6 +404,9 @@ class Conversation(Base):
     whatsapp_cloud_channel_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("whatsapp_cloud_channels.id", ondelete="CASCADE"), nullable=True, index=True
     )
+    meta_channel_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("meta_messaging_channels.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     external_chat_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contact_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
     operator_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -344,6 +416,7 @@ class Conversation(Base):
     agent: Mapped[Agent] = relationship(back_populates="conversations")
     whatsapp_channel: Mapped[WhatsAppChannel | None] = relationship(back_populates="conversations")
     whatsapp_cloud_channel: Mapped[WhatsAppCloudChannel | None] = relationship(back_populates="conversations")
+    meta_channel: Mapped["MetaMessagingChannel | None"] = relationship(back_populates="conversations")
     messages: Mapped[list["Message"]] = relationship(back_populates="conversation", cascade="all, delete-orphan", order_by="Message.created_at")
 
 

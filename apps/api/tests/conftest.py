@@ -36,6 +36,17 @@ def clean_database():
 
 
 @pytest.fixture
+def db_session():
+    """A session onto the test database, for arranging rows the API has no
+    endpoint to create (usage records) or asserting on stored state."""
+    db = TestingSession()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@pytest.fixture
 def client():
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:

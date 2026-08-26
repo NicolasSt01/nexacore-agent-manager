@@ -8,6 +8,13 @@ from .models import User
 from .security import decode_access_token
 
 
+ROLE_SUPERADMIN = "superadmin"
+ROLE_SELLER = "seller"
+# Pre-dates the role system; every account created before it was the agency
+# owner, so it keeps full visibility.
+ROLE_LEGACY_ADMIN = "admin"
+
+
 def get_current_user(
     access_token: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
@@ -24,4 +31,14 @@ def get_current_user(
     user = db.get(User, parsed_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
+
+
+def is_superadmin(user: User) -> bool:
+    return user.role in (ROLE_SUPERADMIN, ROLE_LEGACY_ADMIN)
+
+
+def require_superadmin(user: User = Depends(get_current_user)) -> User:
+    if not is_superadmin(user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This action is restricted to administrators")
     return user

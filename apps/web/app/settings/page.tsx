@@ -6,7 +6,7 @@ import { PageHead } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { api, messageFrom } from "@/lib/api";
 import { useT, type TranslateFn } from "@/lib/i18n";
-import { PROVIDERS } from "@/lib/providers";
+import { CUSTOM_ENDPOINT_PROVIDERS, PROVIDERS } from "@/lib/providers";
 import type { Agency, Provider, ProviderTest } from "@/types";
 
 export default function SettingsPage() {
@@ -40,13 +40,14 @@ export default function SettingsPage() {
   }
   async function deleteLogo() { await api("/agency/logo", { method: "DELETE" }); setLogoVersion((v) => v + 1); await load(); }
 
-  async function saveKey(provider: string, apiKey: string): Promise<boolean> {
+  async function saveKey(provider: string, apiKey: string, baseUrl?: string): Promise<boolean> {
     if (!apiKey.trim()) return false;
     setBusy(true);
+    const payload = JSON.stringify({ api_key: apiKey, ...(baseUrl?.trim() ? { base_url: baseUrl.trim() } : {}) });
     try {
       // Validate the connection before storing; on failure nothing is saved.
-      const test = await api<ProviderTest>(`/providers/${provider}/validate`, { method: "POST", body: JSON.stringify({ api_key: apiKey }) });
-      await api(`/providers/${provider}`, { method: "PUT", body: JSON.stringify({ api_key: apiKey }) });
+      const test = await api<ProviderTest>(`/providers/${provider}/validate`, { method: "POST", body: payload });
+      await api(`/providers/${provider}`, { method: "PUT", body: payload });
       toast.success(test.message);
       await load();
       return true;
@@ -69,14 +70,18 @@ export default function SettingsPage() {
   </div>;
 }
 
-function ProviderKeyCard({ preset, state, busy, onSave, onRemove, t }: { preset: (typeof PROVIDERS)[number]; state?: Provider; busy: boolean; onSave: (p: string, k: string) => Promise<boolean>; onRemove: (p: string) => Promise<void>; t: TranslateFn }) {
+function ProviderKeyCard({ preset, state, busy, onSave, onRemove, t }: { preset: (typeof PROVIDERS)[number]; state?: Provider; busy: boolean; onSave: (p: string, k: string, baseUrl?: string) => Promise<boolean>; onRemove: (p: string) => Promise<void>; t: TranslateFn }) {
   const [key, setKey] = useState("");
   const [reveal, setReveal] = useState(false);
   const [replacing, setReplacing] = useState(false);
+  const [baseUrl, setBaseUrl] = useState(state?.base_url ?? "");
   const configured = Boolean(state?.configured) && !replacing;
+  // Gateways and regional hosts need an operator-supplied endpoint; the first
+  // party providers have a single fixed one.
+  const customEndpoint = CUSTOM_ENDPOINT_PROVIDERS.includes(preset.id);
 
   async function save() {
-    if (await onSave(preset.id, key)) { setKey(""); setReplacing(false); }
+    if (await onSave(preset.id, key, customEndpoint ? baseUrl : undefined)) { setKey(""); setReplacing(false); }
   }
 
   return (
@@ -98,6 +103,12 @@ function ProviderKeyCard({ preset, state, busy, onSave, onRemove, t }: { preset:
                 <button type="button" className="reveal" onClick={() => setReveal((v) => !v)} aria-label={t(reveal ? "settings.providers.hide" : "settings.providers.reveal")}>{reveal ? <EyeOff size={16} /> : <Eye size={16} />}</button>
               </div>
             </label>
+            {customEndpoint && (
+              <label>{t("settings.providers.baseUrl")}
+                <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder={state?.base_url ?? ""} />
+                <small>{t("settings.providers.baseUrlHint")}</small>
+              </label>
+            )}
             <div className="form-footer split">
               {state?.configured ? <button type="button" className="button ghost" disabled={busy} onClick={() => { setKey(""); setReplacing(false); }}>{t("common.cancel")}</button> : <span />}
               <button type="button" className="button primary" disabled={busy || !key.trim()} onClick={save}>{busy ? <LoaderCircle className="spin" size={16} /> : <Save size={16} />} {t("settings.providers.save")}</button>

@@ -5,9 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import get_current_user
+from ..deps import get_current_user, require_superadmin
 from ..models import Agency, User
-from ..schemas import AgencyOut, AgencyUpdate
+from ..schemas import AgencyOut, AgencyUpdate, AgencyUserCreate, AgencyUserOut
+from ..security import hash_password
 from ..slugs import slugify
 
 
@@ -41,6 +42,41 @@ def update_agency(
     db.commit()
     db.refresh(agency)
     return agency
+
+
+@router.get("/users", response_model=list[AgencyUserOut])
+def list_agency_users(db: Session = Depends(get_db), user: User = Depends(require_superadmin)):
+    return db.scalars(
+        select(User).where(User.agency_id == user.agency_id).order_by(User.created_at.asc())
+    ).all()
+
+
+@router.post("/users", response_model=AgencyUserOut, status_code=status.HTTP_201_CREATED)
+def create_agency_user(
+    payload: AgencyUserCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_superadmin),
+):
+    """Add a seller (or another superadmin) to the current agency.
+
+    This is how Edgar and Enedina are created. /auth/register always spins up a
+    brand new agency, so it can never be used to add a colleague to an existing
+    one.
+    """
+    email = payload.email.lower()
+    if db.scalar(select(User).where(User.email == email)):
+        raise HTTPException(status_code=409, detail="A user with that email already exists")
+    member = User(
+        agency_id=user.agency_id,
+        name=payload.name.strip(),
+        email=email,
+        password_hash=hash_password(payload.password),
+        role=payload.role,
+    )
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+    return member
 
 
 @router.post("/logo", response_model=AgencyOut)

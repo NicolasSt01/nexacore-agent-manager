@@ -3,19 +3,24 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { Bot, Building2, CreditCard, Inbox, LayoutDashboard, LogOut, Menu, MessageSquareText, Radio, Settings, Sparkles, Wallet, X } from "lucide-react";
+import { Bot, Building2, CreditCard, Inbox, LayoutDashboard, LogOut, Menu, MessageSquareText, Radio, Settings, Sparkles, Users, Wallet, X } from "lucide-react";
 import { api } from "@/lib/api";
+import { isSuperadmin } from "@/lib/roles";
 import { useT, type I18nKey } from "@/lib/i18n";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import type { User } from "@/types";
 
-const navigation: { href: string; labelKey: I18nKey; icon: typeof LayoutDashboard }[] = [
+type NavItem = { href: string; labelKey: I18nKey; icon: typeof LayoutDashboard; superadminOnly?: boolean };
+
+const navigation: NavItem[] = [
   { href: "/", labelKey: "nav.home", icon: LayoutDashboard },
   { href: "/clients", labelKey: "nav.clients", icon: Building2 },
   { href: "/agents", labelKey: "nav.agents", icon: Bot },
   { href: "/inbox", labelKey: "nav.inbox", icon: Inbox },
   { href: "/playground", labelKey: "nav.playground", icon: MessageSquareText },
   { href: "/channels", labelKey: "nav.channels", icon: Radio },
+  { href: "/finance", labelKey: "nav.finance", icon: Wallet, superadminOnly: true },
+  { href: "/settings/team", labelKey: "nav.team", icon: Users, superadminOnly: true },
   { href: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
@@ -90,8 +95,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="sidebar-workspace"><Building2 size={14} /><span>{user.agency.name}</span></div>
         <nav>
           <span className="nav-label">{t("nav.section")}</span>
-          {navigation.map((item) => {
-            const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          {navigation.filter((item) => !item.superadminOnly || isSuperadmin(user)).map((item) => {
+            // /settings would also match /settings/team, which would light up
+            // two entries at once; require an exact match for the parent.
+            const active = item.href === "/" || item.href === "/settings"
+              ? pathname === item.href
+              : pathname.startsWith(item.href);
             return <Link key={item.href} href={item.href} className={active ? "active" : ""} onClick={() => setMobileOpen(false)}><item.icon size={18} /><span>{t(item.labelKey)}</span></Link>;
           })}
           {EXTRA_NAV.map((item) => {

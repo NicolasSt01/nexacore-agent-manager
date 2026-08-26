@@ -208,7 +208,9 @@ async def _generate_reply(
             sender_name=agent.name,
         )
     )
-    record_usage(db, agent.agency_id, agent.id, agent.provider, agent.model.strip(), completion)
+    # Driven from the internal console, not by the client's end users: recorded
+    # for cost reporting but excluded from the client's quota.
+    record_usage(db, agent.agency_id, agent.client_id, agent.id, agent.provider, agent.model.strip(), completion, source="playground")
     conversation.updated_at = now_utc()
     db.commit()
     return _conversation(db, user, conversation.id)

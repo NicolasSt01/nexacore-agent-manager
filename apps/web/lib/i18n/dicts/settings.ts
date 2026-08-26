@@ -33,6 +33,8 @@ const en = {
     reveal: "Show key",
     hide: "Hide key",
     savedNotVerified: "Saved, but the key could not be verified:",
+    baseUrl: "Endpoint (base URL)",
+    baseUrlHint: "Leave empty to use the provider default. Required for gateways and regional hosts.",
   },
 };
 
@@ -70,6 +72,8 @@ const es: typeof en = {
     reveal: "Mostrar clave",
     hide: "Ocultar clave",
     savedNotVerified: "Guardada, pero no se pudo verificar la clave:",
+    baseUrl: "Endpoint (URL base)",
+    baseUrlHint: "Déjalo vacío para usar el valor por defecto del proveedor. Obligatorio para gateways y hosts regionales.",
   },
 };
 
