@@ -63,6 +63,8 @@ def _setup_channel(client: TestClient, *, image_enabled: bool = False) -> tuple[
             "client_id": customer["id"],
             "provider": "openai",
             "model": "gpt-4.1-mini",
+            # This test covers the reply pipeline, not the debounce: reply at once.
+            "reply_delay_seconds": 0,
             "image_enabled": image_enabled,
             "name": "Host",
             "description": "",

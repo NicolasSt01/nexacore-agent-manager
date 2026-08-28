@@ -1061,3 +1061,32 @@ input:focus, textarea:focus, select:focus { border-color: #3b8ca0; box-shadow: 0
 .preset-row .button { padding: 6px 12px; font-size: 12px; }
 .muted-block { display: block; color: var(--subtle); font-size: 12px; }
 .table-wrap { border: 1px solid var(--line); border-radius: 14px; background: white; overflow-x: auto; }
+
+/* --- Model sync report --- */
+.sync-block { margin: 14px 0; padding: 15px 17px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 12px; background: white; }
+.sync-block h3 { display: flex; align-items: center; gap: 7px; margin: 0 0 6px; font-size: 14px; }
+.sync-block p { margin: 0 0 9px; color: var(--muted); font-size: 13px; }
+.sync-block ul { margin: 0; padding-left: 19px; color: #50586a; font-size: 13px; line-height: 1.8; }
+.sync-block code { padding: 1px 6px; border-radius: 5px; background: #f2f4f7; font-size: 12px; }
+.sync-block.danger { border-left-color: #d0483f; background: #fdf6f5; }
+.sync-block.danger h3 { color: #b93a32; }
+.sync-block.warning { border-left-color: #cb8a27; background: #fffaf0; }
+.sync-block.warning h3 { color: #a8701d; }
+.data-table tr.row-muted td { color: #96a0b0; background: #fcfcfd; }
+.data-table code { padding: 1px 6px; border-radius: 5px; background: #f2f4f7; font-size: 12px; }
+.data-table tr.row-blocked td { background: #fdf6f5; }
+.data-table tr.row-blocked td:first-child strong { color: #b93a32; }
+
+/* --- Client portal: plan usage strip --- */
+.portal-usage { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 22px; margin: 0 0 18px; padding: 17px 20px; border: 1px solid var(--line); border-radius: 14px; background: white; }
+.portal-usage.usage-warning { border-color: #e8c98c; background: #fffaf0; }
+.portal-usage.usage-danger { border-color: #e5a9a3; background: #fdf6f5; }
+.portal-usage-main { min-width: 0; }
+.portal-usage-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.portal-usage-kpis div { text-align: center; }
+.portal-usage-kpis strong { display: block; font-family: var(--font-manrope); font-size: 21px; line-height: 1.2; }
+.portal-usage-kpis small { display: block; margin-top: 3px; color: var(--subtle); font-size: 11px; line-height: 1.3; }
+@media (max-width: 900px) {
+  .portal-usage { grid-template-columns: 1fr; }
+  .portal-usage-kpis { grid-template-columns: repeat(2, 1fr); }
+}

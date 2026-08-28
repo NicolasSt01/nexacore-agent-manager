@@ -53,7 +53,8 @@ def _setup_channel(client: TestClient, platform: str = "messenger") -> tuple[dic
     client.put("/api/providers/openai", json={"api_key": "secret"})
     agent = client.post(
         "/api/agents",
-        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "name": "Host"},
+        # Covers the webhook and reply pipeline, not the debounce.
+        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "name": "Host", "reply_delay_seconds": 0},
     ).json()
     channel = client.put(
         f"/api/meta/{platform}/channels/{customer['id']}",

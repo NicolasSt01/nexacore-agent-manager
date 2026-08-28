@@ -7,15 +7,26 @@ from ..models import Agent, ProviderCredential
 from ..security import decrypt_secret
 
 
-PROVIDERS: dict[str, dict[str, str]] = {
+# `pool` marks a subscription gateway: it meters one shared allowance instead of
+# billing per token, and exposes it at {base_url}/usage. Those providers need
+# the circuit breaker in services/subscription.py — metered providers do not.
+PROVIDERS: dict[str, dict] = {
     "openai": {"label": "OpenAI", "base_url": "https://api.openai.com/v1"},
     "anthropic": {"label": "Anthropic", "base_url": "https://api.anthropic.com/v1"},
     "openrouter": {"label": "OpenRouter (DeepSeek / Qwen / Llama)", "base_url": "https://openrouter.ai/api/v1"},
-    "opencode": {"label": "OpenCode AI", "base_url": "https://api.opencode.ai/v1"},
+    # Verified live against the account's key: api.opencode.ai answers 200 with
+    # a "Not Found" body, which looks healthy but is not the API.
+    "opencode": {"label": "OpenCode Zen", "base_url": "https://opencode.ai/zen/v1", "pool": True},
+    "opencode_go": {"label": "OpenCode GO", "base_url": "https://opencode.ai/zen/go/v1", "pool": True},
     "deepseek": {"label": "DeepSeek Direct", "base_url": "https://api.deepseek.com/v1"},
     "qwen": {"label": "Qwen / DashScope", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"},
 }
 SUPPORTED = tuple(PROVIDERS)
+
+
+def has_shared_pool(provider: str) -> bool:
+    """Whether this provider meters a shared subscription pool."""
+    return bool(PROVIDERS.get(provider, {}).get("pool"))
 
 
 def base_url_for(provider: str) -> str:

@@ -30,14 +30,32 @@ internal/
 
 # Local-only Claude context (never committed)
 CLAUDE.local.md
+CLAUDE.md
+
+# Internal documentation (never committed)
+/docs/
+
+# Tests (never committed)
+/tests/
+apps/api/tests/
+apps/web/tests/
+apps/whatsapp/tests/
 
 deploy.py
 
 # Local SQLite scratch databases (production is PostgreSQL via Alembic)
 *.db
 *.db.bak-*
+*.db.bak2-*
+*.db.bak3-*
+*.db.bak4-*
+*.db.bak5-*
+*.db.bak6-*
 
 # Playwright
 /node_modules/
 /test-results/
 /playwright-report/
+
+# Graphify generated documentation
+graphify-out/

@@ -9,16 +9,22 @@ for actually delivering the reply.
 
 import uuid
 from dataclasses import dataclass
+from datetime import timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from ..models import Agent, Conversation, Message, now_utc
+from .history import build_messages
+from .summary import refresh_if_needed, usable_summary
 from .knowledge import build_system_prompt, retrieve_knowledge
 from .media import describe_image, transcribe_audio
 from .providers import resolve_agent_credentials, resolve_provider_credentials
 from .tools import run_completion
+from .quota import QuotaExceeded, check_quota, mark_blocked, should_warn, mark_warned
+from .subscription import get_pool_state, resolve_model
+from .notifications import notify_quota_blocked, notify_quota_warning
 from .usage import record_usage
 
 
@@ -43,6 +49,9 @@ class InboundResult:
     conversation_id: uuid.UUID | None = None
     mode: str | None = None
     outbound_message_id: uuid.UUID | None = None
+    # True when the reply was deferred to let the contact finish writing; the
+    # caller must not treat the missing reply as a failure.
+    deferred: bool = False
 
 
 def _media_placeholder(kind: str) -> str:
@@ -152,6 +161,63 @@ async def process_inbound(
         return InboundResult(accepted=True, conversation_id=conversation.id, mode="human")
 
     agent = channel.agent
+
+    # People write in fragments. Waiting a few seconds lets the batch complete
+    # so the agent answers the whole thought once, instead of replying to "sí"
+    # while the contact is still typing the rest.
+    delay = agent.reply_delay_seconds or 0
+    if delay > 0:
+        conversation.reply_due_at = now_utc() + timedelta(seconds=delay)
+        db.commit()
+        return InboundResult(accepted=True, conversation_id=conversation.id, mode="ai", deferred=True)
+
+    return await generate_reply(db, channel, conversation, usage_source or conversation_channel)
+
+
+def _pending_query(db: Session, conversation: Conversation, limit: int = 5) -> str:
+    """The visitor text still awaiting an answer, newest batch first.
+
+    Everything said since the agent last spoke, joined. Retrieving on the last
+    fragment alone ("sí") would find nothing; the batch carries the intent.
+    """
+    rows = db.scalars(
+        select(Message)
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at.desc())
+        .limit(limit * 2)
+    ).all()
+    pending: list[str] = []
+    for message in rows:
+        if message.role != "user":
+            break
+        pending.append(message.content)
+        if len(pending) >= limit:
+            break
+    return "\n".join(reversed(pending))
+
+
+async def generate_reply(db: Session, channel, conversation: Conversation, usage_source: str) -> InboundResult:
+    """Produce the agent's reply for everything unanswered in the conversation.
+
+    Split out from ingestion so the deferred worker can call it once the batch
+    has settled. The accumulated messages are already stored, so the prompt
+    naturally contains them as consecutive turns.
+    """
+    agent = channel.agent
+    # Hard enforcement, before the provider call: checking afterwards would mean
+    # the tokens were already spent.
+    try:
+        check_quota(db, channel.client, source=usage_source)
+    except QuotaExceeded:
+        # The conversation drops to a human so an operator sees it in the inbox.
+        # No automated "you ran out of credit" message reaches the end contact:
+        # a patient messaging a clinic must never see NexaCore's billing state.
+        conversation.mode = "human"
+        db.commit()
+        if mark_blocked(db, channel.client):
+            notify_quota_blocked(db, channel.client)
+        return InboundResult(accepted=True, conversation_id=conversation.id, mode="human")
+
     credentials = resolve_agent_credentials(db, agent)
     if not agent.is_active or not credentials or not agent.model.strip():
         channel.last_error = "A message was received, but the assigned agent is not ready (model or provider key missing)."
@@ -159,20 +225,38 @@ async def process_inbound(
         db.commit()
         return InboundResult(accepted=True, conversation_id=conversation.id, mode="ai")
 
-    knowledge = await retrieve_knowledge(db, agent, content)
     db.refresh(conversation)
-    history = db.scalars(
-        select(Message)
-        .where(Message.conversation_id == conversation.id)
-        .order_by(Message.created_at.desc())
-        .limit(agent.memory_limit)
-    ).all()
-    history = list(reversed(history))
-    messages = [
-        {"role": "system", "content": build_system_prompt(agent, knowledge.text)},
-        *[{"role": item.role, "content": item.content} for item in history],
-    ]
+    # Retrieve against everything the contact said in this batch, not just the
+    # last fragment: "sí" on its own retrieves nothing useful.
+    query = _pending_query(db, conversation)
+    knowledge = await retrieve_knowledge(db, agent, query)
+    # Fold any closed session into the contact card before building the prompt,
+    # so a returning customer is recognised on their first message back rather
+    # than one message later.
     base_url, api_key = credentials
+    await refresh_if_needed(db, agent, conversation, base_url, api_key)
+    messages = build_messages(
+        db,
+        agent,
+        conversation.id,
+        build_system_prompt(agent, knowledge.text),
+        contact_summary=usable_summary(conversation),
+    )
+    # Circuit breaker on the shared subscription pool. Degrading to a model
+    # that does not consume it keeps every client answering; without this, one
+    # exhausted pool silences the whole portfolio at once.
+    pool = get_pool_state(db, agent.agency_id, agent.provider)
+    if pool.blocked:
+        conversation.mode = "human"
+        channel.last_error = (
+            f"The {pool.provider} subscription pool is at {pool.percent:.0f}%. "
+            "Conversations were handed over to a human."
+        )
+        channel.updated_at = now_utc()
+        db.commit()
+        return InboundResult(accepted=True, conversation_id=conversation.id, mode="human")
+    model_used, swapped = resolve_model(pool, agent.model)
+
     try:
         completion = await run_completion(
             db,
@@ -182,6 +266,7 @@ async def process_inbound(
             messages,
             temperature=agent.temperature,
             max_tokens=agent.max_tokens,
+            model_override=model_used if swapped else None,
         )
     except Exception as exc:
         channel.last_error = f"Message received, but the agent could not reply: {str(exc)[:400]}"
@@ -198,11 +283,14 @@ async def process_inbound(
         sender_type="ai",
         sender_name=agent.name,
     )
-    record_usage(db, agent.agency_id, agent.client_id, agent.id, agent.provider, agent.model.strip(), completion, source=usage_source or conversation_channel)
+    record_usage(db, agent.agency_id, agent.client_id, agent.id, agent.provider, model_used.strip(), completion, source=usage_source)
     conversation.updated_at = now_utc()
     channel.last_error = None
     db.add(outbound)
     db.commit()
+    if should_warn(db, channel.client):
+        mark_warned(db, channel.client)
+        notify_quota_warning(db, channel.client)
     return InboundResult(
         accepted=True,
         reply=completion.text,

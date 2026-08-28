@@ -34,6 +34,23 @@ class Settings(BaseSettings):
     # Meta Graph API root used by the WhatsApp Cloud API channel; override to
     # point at a mock server in tests.
     meta_graph_base_url: str = "https://graph.facebook.com/v23.0"
+    # Banco de Mexico SIE token for the USD/MXN FIX series. Without it the FX
+    # service falls back to the last stored rate, then to the seed below.
+    banxico_token: str = ""
+    fx_fallback_usd_mxn: float = 17.0
+    # Daily FX refresh + model-catalog drift report. Disable on all but one
+    # replica when running more than one API process.
+    daily_jobs_enabled: bool = True
+    # Bootstrap data from app/seeds/*.json applied on startup (agency, users,
+    # clients, agents). Create-only: existing records are never overwritten.
+    seed_enabled: bool = True
+    # Re-apply the seeded roles and password hashes to already-seeded users on
+    # every start. Off so a password changed in the UI survives a restart; turn
+    # it on temporarily to recover a locked-out superadmin.
+    seed_reset_passwords: bool = False
+    # Directory holding the seed files. Point it at a path outside the repo
+    # (a mounted volume) to keep private bootstrap data out of version control.
+    seed_dir: str = ""
 
     model_config = SettingsConfigDict(
         env_file=(REPO_ROOT / ".env", APP_DIR / ".env"),

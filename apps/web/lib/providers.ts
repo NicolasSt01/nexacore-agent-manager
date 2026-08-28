@@ -52,9 +52,16 @@ export const PROVIDERS = [
   },
   {
     id: "opencode",
-    label: "OpenCode AI",
-    keyPlaceholder: "oc-...",
-    keyUrl: "https://opencode.ai",
+    label: "OpenCode Zen",
+    keyPlaceholder: "sk-...",
+    keyUrl: "https://opencode.ai/zen",
+    models: [],
+  },
+  {
+    id: "opencode_go",
+    label: "OpenCode GO",
+    keyPlaceholder: "sk-...",
+    keyUrl: "https://opencode.ai/zen",
     models: [],
   },
   {
@@ -75,7 +82,7 @@ export const PROVIDERS = [
 
 // Providers whose endpoint is operator-configured (a gateway or a regional
 // host), so the settings form offers a base URL field for them.
-export const CUSTOM_ENDPOINT_PROVIDERS: readonly string[] = ["openrouter", "opencode", "deepseek", "qwen"];
+export const CUSTOM_ENDPOINT_PROVIDERS: readonly string[] = ["openrouter", "opencode", "opencode_go", "deepseek", "qwen"];
 
 export type ProviderId = (typeof PROVIDERS)[number]["id"];
 
@@ -88,6 +95,9 @@ export function providerLabel(id: string): string {
   return PROVIDERS.find((p) => p.id === id)?.label ?? id;
 }
 
+// Deprecated: the model list now comes from the backend catalog. See
+// lib/use-catalog.ts — a second hard-coded list is how the OpenCode picker
+// silently rendered empty.
 export function modelsFor(id: string): readonly string[] {
   return PROVIDERS.find((p) => p.id === id)?.models ?? [];
 }

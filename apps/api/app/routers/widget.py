@@ -7,8 +7,13 @@ from ..models import Agency, Agent, Conversation, Message, now_utc
 from ..ratelimit import widget_rate_limit
 from ..schemas import WidgetConfigOut, WidgetMessageIn, WidgetReply
 from ..services.tools import run_completion
+from ..services.history import build_messages
+from ..services.summary import refresh_if_needed, usable_summary
 from ..services.knowledge import build_system_prompt, retrieve_knowledge
 from ..services.providers import resolve_agent_credentials
+from ..services.quota import QuotaExceeded, check_quota, mark_blocked
+from ..services.subscription import get_pool_state, resolve_model
+from ..services.notifications import notify_quota_blocked
 from ..services.usage import record_usage
 
 
@@ -105,34 +110,53 @@ async def widget_message(public_id: str, payload: WidgetMessageIn, db: Session =
     if conversation.mode == "human":
         return {"mode": "human", "reply": None, "messages": []}
 
+    # Hard enforcement. The visitor gets the same silent fallback as an
+    # unconfigured agent: a website visitor must never see a billing error.
+    try:
+        check_quota(db, agent.client, source="widget")
+    except QuotaExceeded:
+        conversation.mode = "human"
+        db.commit()
+        if mark_blocked(db, agent.client):
+            notify_quota_blocked(db, agent.client)
+        return {"mode": "human", "reply": None, "messages": []}
+
     credentials = resolve_agent_credentials(db, agent)
     if not agent.is_active or not credentials or not agent.model.strip():
         return {"mode": "ai", "reply": None, "messages": []}
 
     knowledge = await retrieve_knowledge(db, agent, content)
     db.refresh(conversation)
-    history = db.scalars(
-        select(Message)
-        .where(Message.conversation_id == conversation.id)
-        .order_by(Message.created_at.desc())
-        .limit(agent.memory_limit or HISTORY_LIMIT)
-    ).all()
-    history = list(reversed(history))
-    messages = [
-        {"role": "system", "content": build_system_prompt(agent, knowledge.text)},
-        *[{"role": item.role, "content": item.content} for item in history],
-    ]
+    # Fold any closed session into the contact card before building the prompt,
+    # so a returning customer is recognised on their first message back rather
+    # than one message later.
     base_url, api_key = credentials
+    await refresh_if_needed(db, agent, conversation, base_url, api_key)
+    messages = build_messages(
+        db,
+        agent,
+        conversation.id,
+        build_system_prompt(agent, knowledge.text),
+        contact_summary=usable_summary(conversation),
+    )
+    pool = get_pool_state(db, agent.agency_id, agent.provider)
+    if pool.blocked:
+        conversation.mode = "human"
+        db.commit()
+        return {"mode": "human", "reply": None, "messages": []}
+    model_used, swapped = resolve_model(pool, agent.model)
+
     try:
         completion = await run_completion(
             db, agent, base_url, api_key, messages,
             temperature=agent.temperature, max_tokens=agent.max_tokens,
+            model_override=model_used if swapped else None,
         )
     except HTTPException:
         return {"mode": "ai", "reply": None, "messages": []}
 
     conversation.updated_at = now_utc()
     db.add(Message(conversation_id=conversation.id, role="assistant", content=completion.text, sources=knowledge.sources, tool_calls=completion.tool_calls, sender_type="ai", sender_name=agent.name))
-    record_usage(db, agent.agency_id, agent.client_id, agent.id, agent.provider, agent.model.strip(), completion, source="widget")
+    record_usage(db, agent.agency_id, agent.client_id, agent.id, agent.provider, model_used.strip(), completion, source="widget")
     db.commit()
     return {"mode": "ai", "reply": completion.text, "messages": []}

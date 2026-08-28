@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, Coins, Info, LoaderCircle, Wallet } from "lucide-react";
+import { Building2, Coins, Info, LoaderCircle, TrendingUp, TriangleAlert, Wallet } from "lucide-react";
 import { Alert, PageHead } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { api, messageFrom } from "@/lib/api";
@@ -52,9 +52,25 @@ export default function FinancePage() {
         </article>
         <article className="metric-card">
           <span className="metric-icon amber"><Coins size={20} /></span>
-          <div><small>{t("finance.dashboard.tokensConsumed")}</small><strong>{formatTokens(data.total_tokens_consumed)}</strong></div>
+          <div><small>{t("finance.dashboard.aiCost")}</small><strong>{formatMxn(data.total_ai_cost_mxn)}</strong></div>
+        </article>
+        <article className="metric-card">
+          <span className="metric-icon violet"><TrendingUp size={20} /></span>
+          <div>
+            <small>{t("finance.dashboard.margin")}</small>
+            <strong>{formatMxn(data.total_margin_mxn)}</strong>
+            <p>{t("finance.dashboard.marginPct", { pct: data.margin_pct })}</p>
+          </div>
         </article>
       </section>
+
+      <div className="security-note"><Info size={20} /><span>{t("finance.dashboard.costNotice")}</span></div>
+
+      {data.unpriced_usage_records > 0 && (
+        <div className="sync-block warning">
+          <h3><TriangleAlert size={17} /> {t("finance.dashboard.unpricedWarning", { count: data.unpriced_usage_records })}</h3>
+        </div>
+      )}
 
       <section className="section-block">
         <div className="section-heading">
@@ -70,12 +86,14 @@ export default function FinancePage() {
                 <th>{t("finance.dashboard.colSeller")}</th>
                 <th>{t("finance.dashboard.colClients")}</th>
                 <th>{t("finance.dashboard.colRevenue")}</th>
+                <th>{t("finance.dashboard.colCost")}</th>
+                <th>{t("finance.dashboard.colMargin")}</th>
                 <th>{t("finance.dashboard.colTokens")}</th>
               </tr>
             </thead>
             <tbody>
               {data.workers_metrics.length === 0 && (
-                <tr><td colSpan={4}>{t("finance.dashboard.noSellers")}</td></tr>
+                <tr><td colSpan={6}>{t("finance.dashboard.noSellers")}</td></tr>
               )}
               {data.workers_metrics.map((seller) => (
                 <tr key={seller.worker_id}>
@@ -85,7 +103,49 @@ export default function FinancePage() {
                   </td>
                   <td>{seller.clients_count}</td>
                   <td>{formatMxn(seller.monthly_revenue_mxn)}</td>
+                  <td>{formatMxn(seller.ai_cost_mxn)}</td>
+                  <td><strong>{formatMxn(seller.margin_mxn)}</strong></td>
                   <td>{formatTokens(seller.tokens_consumed)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section className="section-block">
+        <div className="section-heading">
+          <div>
+            <h2>{t("finance.dashboard.perClientHeading")}</h2>
+            <p>{t("finance.dashboard.perClientCopy")}</p>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>{t("finance.dashboard.colClient")}</th>
+                <th>{t("finance.dashboard.colPlan")}</th>
+                <th>{t("finance.dashboard.colUsage")}</th>
+                <th>{t("finance.dashboard.colCost")}</th>
+                <th>{t("finance.dashboard.colMargin")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.clients_metrics.map((row) => (
+                <tr key={row.client_id} className={row.is_blocked ? "row-blocked" : ""}>
+                  <td>
+                    <strong>{row.client_name}</strong>
+                    <small className="muted-block">{row.seller_name || "—"}</small>
+                  </td>
+                  <td>{formatMxn(row.monthly_fee_mxn)}</td>
+                  <td>
+                    {formatTokens(row.tokens_used)}
+                    <small className="muted-block">
+                      {row.monthly_token_limit ? `${row.usage_pct}%` : t("finance.billing.unlimited")}
+                    </small>
+                  </td>
+                  <td>{formatMxn(row.ai_cost_mxn)}</td>
+                  <td><strong>{formatMxn(row.margin_mxn)}</strong></td>
                 </tr>
               ))}
             </tbody>

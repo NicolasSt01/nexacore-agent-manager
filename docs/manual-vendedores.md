@@ -182,15 +182,40 @@ al primer intento**. Si sales con la mitad, vas a regresar tres veces y el clien
 > *"Su plan cubre alrededor de X conversaciones al mes. Si se pasa, le avisamos antes de que
 > ocurra y le ofrecemos subir de plan."*
 
-Como referencia interna: una conversación típica de 8 a 10 mensajes consume aproximadamente entre
-3,000 y 5,000 tokens. Un plan de 500,000 alcanza para algo del orden de **100 a 150 conversaciones
-al mes**. Verifica el consumo real del cliente en su ficha durante el primer mes y ajusta el plan
-si hace falta — es mejor subirlo a tiempo que dejarlo llegar al límite.
+Referencia interna, **medida en pruebas reales** (agente dental con `glm-5.3-flash`, 27/08/2026):
+cada intercambio (pregunta del paciente + respuesta del agente) consume ~890 tokens.
+
+| Tipo de conversación | Tokens | Conversaciones con 500k |
+|---|---|---|
+| Corta (~4 intercambios) | ~3,600 | **140 al mes** |
+| Media (~6 intercambios) | ~5,300 | **93 al mes** |
+| Larga (~10 intercambios) | ~8,900 | **56 al mes** |
+
+Ojo: el consumo por intercambio **crece dentro de una misma conversación**, porque el agente
+recibe todo el historial en cada respuesta. Por eso una conversación larga cuesta más del doble
+que dos cortas. Un negocio con conversaciones largas (cotizaciones, muchas dudas) rinde menos que
+uno de preguntas sueltas.
+
+Verifica el consumo real del cliente en su ficha durante el primer mes y ajusta el plan si hace
+falta — es mejor subirlo a tiempo que dejarlo llegar al límite.
 
 ### El ciclo corta el día que se dio de alta
 
 Si registras al cliente el día 12, su ciclo corre del 12 al 12. No es mes calendario. Díselo al
 cliente para que no se confunda.
+
+### Margen por plan (información interna — no se comparte con el cliente)
+
+Con `glm-5.3-flash` a través de OpenCode GO, medido con consumo real:
+
+| Plan | Precio | Costo real de IA | Margen |
+|---|---|---|---|
+| Básico | $200 MXN | ~$1.08 MXN | **$198.92 (99.5%)** |
+| Pro | $500 MXN | ~$3.25 MXN | **$496.75 (99.3%)** |
+
+El costo de IA es prácticamente despreciable frente al precio. Lo que el cliente paga es el
+levantamiento, el mantenimiento y el soporte — no los tokens. **Nunca le desgloses el costo de IA
+al cliente**: no vendemos tokens, vendemos que su negocio no pierda prospectos.
 
 ### Cómo justificar el precio
 

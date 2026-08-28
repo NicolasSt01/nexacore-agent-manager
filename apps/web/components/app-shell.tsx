@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { Bot, Building2, CreditCard, Inbox, LayoutDashboard, LogOut, Menu, MessageSquareText, Radio, Settings, Sparkles, Users, Wallet, X } from "lucide-react";
+import { Bot, Building2, CreditCard, Inbox, LayoutDashboard, LibraryBig, LogOut, Menu, MessageSquareText, Radio, Settings, Sparkles, Users, Wallet, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { isSuperadmin } from "@/lib/roles";
 import { useT, type I18nKey } from "@/lib/i18n";
@@ -19,6 +19,7 @@ const navigation: NavItem[] = [
   { href: "/inbox", labelKey: "nav.inbox", icon: Inbox },
   { href: "/playground", labelKey: "nav.playground", icon: MessageSquareText },
   { href: "/channels", labelKey: "nav.channels", icon: Radio },
+  { href: "/templates", labelKey: "nav.templates", icon: LibraryBig },
   { href: "/finance", labelKey: "nav.finance", icon: Wallet, superadminOnly: true },
   { href: "/settings/team", labelKey: "nav.team", icon: Users, superadminOnly: true },
   { href: "/settings", labelKey: "nav.settings", icon: Settings },

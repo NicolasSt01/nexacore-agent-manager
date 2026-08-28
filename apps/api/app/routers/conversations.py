@@ -5,6 +5,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from ..database import get_db
+from ..services.scoping import not_found, scope_to_agency
 from ..deps import get_current_user
 from ..models import Agent, Conversation, Message, User, now_utc
 from ..schemas import (
@@ -16,6 +17,8 @@ from ..schemas import (
     SendMessageRequest,
 )
 from ..services.tools import run_completion
+from ..services.history import build_messages
+from ..services.summary import refresh_if_needed, usable_summary
 from ..services.knowledge import build_system_prompt, retrieve_knowledge
 from ..services.media import describe_image, transcribe_audio
 from ..services.providers import resolve_agent_credentials, resolve_provider_credentials
@@ -29,17 +32,18 @@ MAX_MEDIA_BYTES = 20 * 1024 * 1024
 
 
 def _conversation(db: Session, user: User, conversation_id: uuid.UUID) -> Conversation:
-    conversation = db.scalar(
+    stmt = (
         select(Conversation)
         .options(
             selectinload(Conversation.messages),
             joinedload(Conversation.agent).joinedload(Agent.client),
         )
         .execution_options(populate_existing=True)
-        .where(Conversation.id == conversation_id, Conversation.agency_id == user.agency_id)
+        .where(Conversation.id == conversation_id)
     )
+    conversation = db.scalar(scope_to_agency(stmt, Conversation, user))
     if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        raise not_found("Conversation not found")
     return conversation
 
 
@@ -50,7 +54,7 @@ def list_conversations(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    query = select(Conversation).where(Conversation.agency_id == user.agency_id)
+    query = scope_to_agency(select(Conversation), Conversation, user)
     if agent_id:
         query = query.where(Conversation.agent_id == agent_id)
     if client_id:
@@ -96,8 +100,8 @@ def inbox(
         .join(Agent, Agent.id == Conversation.agent_id)
         .outerjoin(last, last.c.cid == Conversation.id)
         .outerjoin(unread_counts, unread_counts.c.cid == Conversation.id)
-        .where(Conversation.agency_id == user.agency_id)
     )
+    query = scope_to_agency(query, Conversation, user)
     if agent_id:
         query = query.where(Conversation.agent_id == agent_id)
     if channel:
@@ -137,7 +141,7 @@ def inbox(
 
 @router.post("", response_model=ConversationDetail, status_code=status.HTTP_201_CREATED)
 def create_conversation(payload: ConversationCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    agent = db.scalar(select(Agent).where(Agent.id == payload.agent_id, Agent.agency_id == user.agency_id))
+    agent = db.scalar(scope_to_agency(select(Agent).where(Agent.id == payload.agent_id), Agent, user))
     if not agent:
         raise HTTPException(status_code=400, detail="The selected agent does not exist")
     conversation = Conversation(
@@ -179,6 +183,7 @@ def _ready_agent(db: Session, conversation: Conversation) -> tuple[Agent, tuple[
     return agent, credentials
 
 
+
 async def _generate_reply(
     db: Session,
     user: User,
@@ -188,12 +193,21 @@ async def _generate_reply(
     query: str,
 ) -> Conversation:
     """Run the agent over the current conversation and store the assistant reply."""
+    # No quota gate here on purpose: this is the internal console, its usage is
+    # excluded from the client's package (see billing.NON_BILLABLE_SOURCES), and
+    # a seller needs the playground precisely when an agent has a problem.
     knowledge = await retrieve_knowledge(db, agent, query)
-    refreshed = _conversation(db, user, conversation.id)
-    recent = refreshed.messages[-agent.memory_limit:] if agent.memory_limit else []
-    history = [{"role": item.role, "content": item.content} for item in recent]
-    messages = [{"role": "system", "content": build_system_prompt(agent, knowledge.text)}, *history]
+    # Same continuity as the live channels: a conversation resumed days later
+    # must not start over, whether it comes from WhatsApp or from the console.
     base_url, api_key = credentials
+    await refresh_if_needed(db, agent, conversation, base_url, api_key)
+    messages = build_messages(
+        db,
+        agent,
+        conversation.id,
+        build_system_prompt(agent, knowledge.text),
+        contact_summary=usable_summary(conversation),
+    )
     completion = await run_completion(
         db, agent, base_url, api_key, messages, temperature=agent.temperature, max_tokens=agent.max_tokens
     )

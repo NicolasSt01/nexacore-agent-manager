@@ -5,8 +5,9 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import Conversation, WhatsAppCloudChannel
+from ..models import Conversation, MetaMessagingChannel, WhatsAppCloudChannel
 from ..security import decrypt_secret
+from .meta_messaging import send_text as meta_send_text
 from .whatsapp_cloud import send_text
 
 
@@ -60,4 +61,18 @@ async def send_channel_message(db: Session, conversation: Conversation, content:
             conversation.external_chat_id,
             content,
         )
+    if conversation.channel in ("messenger", "instagram"):
+        if not conversation.meta_channel_id or not conversation.external_chat_id:
+            raise HTTPException(status_code=409, detail="This conversation does not have a valid destination")
+        meta = db.get(MetaMessagingChannel, conversation.meta_channel_id)
+        if not meta or not meta.encrypted_access_token or not meta.account_id:
+            raise HTTPException(status_code=409, detail="The channel is not configured")
+        return await meta_send_text(
+            decrypt_secret(meta.encrypted_access_token),
+            meta.account_id,
+            conversation.external_chat_id,
+            content,
+        )
+    # Channels with no outbound path (playground, widget): the message is
+    # stored and read from the UI, there is nothing to deliver.
     return None

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..config import get_settings
 from ..database import get_db
+from ..services.scoping import not_found, scope_clients, scope_to_agency
 from ..deps import get_current_user
 from ..models import Agent, Client, Conversation, Message, User, WhatsAppChannel, now_utc
 from ..schemas import (
@@ -33,9 +34,8 @@ internal_router = APIRouter(prefix="/internal/whatsapp", tags=["WhatsApp interna
 
 def _channel_for_user(db: Session, user: User, client_id: uuid.UUID) -> WhatsAppChannel:
     channel = db.scalar(
-        select(WhatsAppChannel).where(
-            WhatsAppChannel.client_id == client_id,
-            WhatsAppChannel.agency_id == user.agency_id,
+        scope_to_agency(
+            select(WhatsAppChannel).where(WhatsAppChannel.client_id == client_id), WhatsAppChannel, user
         )
     )
     if not channel:
@@ -91,7 +91,7 @@ def configure_channel(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    client = db.scalar(select(Client).where(Client.id == client_id, Client.agency_id == user.agency_id))
+    client = db.scalar(scope_clients(select(Client).where(Client.id == client_id), user))
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
     agent = db.scalar(

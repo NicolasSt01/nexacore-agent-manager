@@ -35,7 +35,7 @@ async def chat_completion(
     try:
         if provider == "anthropic":
             return await _anthropic_messages(base_url, api_key, model, messages, temperature, max_tokens)
-        if provider in ("openrouter", "deepseek", "qwen", "opencode"):
+        if provider in ("openrouter", "deepseek", "qwen", "opencode", "opencode_go"):
             return await _openai_chat_completions(base_url, api_key, model, messages, temperature, max_tokens)
         try:
             return await _openai_responses(base_url, api_key, model, messages, temperature, max_tokens)

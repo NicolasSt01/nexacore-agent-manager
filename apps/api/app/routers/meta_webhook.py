@@ -154,7 +154,9 @@ async def _handle_message(
         channel.updated_at = now_utc()
         db.commit()
         return
-    if not result.reply or not access_token or not channel.account_id:
+    # A deferred reply is delivered later by services/replies.py, once the
+    # contact has stopped writing.
+    if result.deferred or not result.reply or not access_token or not channel.account_id:
         return
     try:
         message_id = await send_text(access_token, channel.account_id, inbound.external_chat_id, result.reply)

@@ -133,6 +133,8 @@ def test_main_crud_knowledge_and_persistent_chat(authenticated_client: TestClien
             "instructions": "Only answer questions about the clinic's services.",
             "personality": "Warm and clear",
             "is_active": True,
+            # These tests cover the reply pipeline, not the debounce.
+            "reply_delay_seconds": 0,
         },
     )
     assert agent.status_code == 201
@@ -196,7 +198,7 @@ def test_widget_public_chat_and_gating(authenticated_client: TestClient, monkeyp
     client.put("/api/providers/openai", json={"api_key": "secret"})
     agent = client.post(
         "/api/agents",
-        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "name": "Sofia", "description": "", "instructions": "", "personality": "", "is_active": True},
+        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "name": "Sofia", "description": "", "instructions": "", "personality": "", "is_active": True, "reply_delay_seconds": 0},
     ).json()
     public_id = agent["widget_public_id"]
 
@@ -266,7 +268,7 @@ def test_usage_recorded_and_reported(authenticated_client: TestClient, monkeypat
     client.put("/api/providers/openai", json={"api_key": "secret"})
     agent = client.post(
         "/api/agents",
-        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "name": "Meter", "description": "", "instructions": "", "personality": "", "is_active": True},
+        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "name": "Meter", "description": "", "instructions": "", "personality": "", "is_active": True, "reply_delay_seconds": 0},
     ).json()
     conversation = client.post("/api/conversations", json={"agent_id": agent["id"]}).json()
 
@@ -315,7 +317,7 @@ def test_agent_qa_pairs_reach_prompt(authenticated_client: TestClient, monkeypat
     client.put("/api/providers/openai", json={"api_key": "secret"})
     agent = client.post(
         "/api/agents",
-        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "name": "Faq", "description": "", "instructions": "", "personality": "", "is_active": True},
+        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "name": "Faq", "description": "", "instructions": "", "personality": "", "is_active": True, "reply_delay_seconds": 0},
     ).json()
 
     created = client.post(f"/api/agents/{agent['id']}/qa", json={"question": "¿Horario?", "answer": "9am a 6pm"})
@@ -449,7 +451,7 @@ def test_media_message_rejected_when_capability_disabled(authenticated_client: T
     client.put("/api/providers/openai", json={"api_key": "secret"})
     agent = client.post(
         "/api/agents",
-        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "name": "Bot", "description": "", "instructions": "", "personality": "", "is_active": True},
+        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "name": "Bot", "description": "", "instructions": "", "personality": "", "is_active": True, "reply_delay_seconds": 0},
     ).json()
     conversation = client.post("/api/conversations", json={"agent_id": agent["id"]}).json()
     rejected = client.post(
@@ -564,7 +566,7 @@ def test_whatsapp_inbound_image_uses_capability(authenticated_client: TestClient
     client.put("/api/providers/openai", json={"api_key": "secret"})
     agent = client.post(
         "/api/agents",
-        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "image_enabled": True, "name": "Host", "description": "", "instructions": "", "personality": "", "is_active": True},
+        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "image_enabled": True, "name": "Host", "description": "", "instructions": "", "personality": "", "is_active": True, "reply_delay_seconds": 0},
     ).json()
     channel = client.put(f"/api/whatsapp/channels/{customer['id']}", json={"agent_id": agent["id"]}).json()
     headers = {"X-Bridge-Token": get_settings().whatsapp_bridge_token}
@@ -602,7 +604,7 @@ def test_whatsapp_channel_inbound_ai_takeover_and_session(authenticated_client: 
     client.put("/api/providers/openai", json={"api_key": "secret"})
     agent = client.post(
         "/api/agents",
-        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "name": "Sol Advisor", "description": "", "instructions": "Help the customers.", "personality": "Friendly", "is_active": True},
+        json={"client_id": customer["id"], "provider": "openai", "model": "gpt-4.1-mini", "name": "Sol Advisor", "description": "", "instructions": "Help the customers.", "personality": "Friendly", "is_active": True, "reply_delay_seconds": 0},
     ).json()
 
     configured = client.put(

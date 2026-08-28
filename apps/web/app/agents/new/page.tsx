@@ -8,7 +8,8 @@ import { Alert } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { api, messageFrom } from "@/lib/api";
 import { useLanguage } from "@/lib/i18n";
-import { PROVIDERS, modelsFor, estimateTokens, modelContextWindow } from "@/lib/providers";
+import { PROVIDERS, estimateTokens, modelContextWindow } from "@/lib/providers";
+import { modelsForProvider, useCatalog } from "@/lib/use-catalog";
 import { Combobox } from "@/components/combobox";
 import { TIMEZONES } from "@/lib/timezones";
 import { agentTemplates, localize } from "@/lib/agent-templates";
@@ -23,6 +24,7 @@ const STEP_KEYS = ["agents.wizard.s1", "agents.wizard.s2", "agents.wizard.s3", "
 export default function NewAgentPage() {
   const { t, lang } = useLanguage();
   const toast = useToast();
+  const catalog = useCatalog();
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [clients, setClients] = useState<Client[]>([]);
@@ -138,7 +140,7 @@ export default function NewAgentPage() {
         <label>{t("agents.detail.timezoneLabel")}<Combobox value={timezone} onChange={setTimezone} options={TIMEZONES} placeholder={t("agents.detail.timezoneLabel")} /></label>
         <div className="form-grid">
           <label>{t("agents.new.providerLabel")}<select value={provider} onChange={(e) => setProvider(e.target.value)}>{PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label>
-          <label>{t("agents.new.modelLabel")}<Combobox value={model} onChange={setModel} options={modelsFor(provider)} placeholder={t("agents.new.modelPlaceholder")} allowCustom /></label>
+          <label>{t("agents.new.modelLabel")}<Combobox value={model} onChange={setModel} options={modelsForProvider(catalog, provider)} placeholder={t("agents.new.modelPlaceholder")} allowCustom /></label>
         </div>
         <div className="context-bar"><div style={{ width: `${contextPct}%` }} /><small><Sparkles size={12} /> {t("agents.detail.contextUsage", { count: promptTokens.toLocaleString(lang), total: contextWindow.toLocaleString(lang) })}</small></div>
         <div className="slider-field"><div className="slider-head"><span>{t("agents.detail.temperatureLabel")}</span><strong>{temperature.toFixed(1)}/2</strong></div><input type="range" min="0" max="2" step="0.1" value={temperature} onChange={(e) => setTemperature(Number(e.target.value))} /></div>

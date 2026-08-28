@@ -10,10 +10,22 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..config import get_settings
 from ..database import get_db
-from ..deps import get_current_user
+from ..deps import get_current_user, is_superadmin
 from ..models import Agent, AgentQA, Client, KnowledgeDocument, User, WhatsAppChannel
-from ..schemas import AgentCreate, AgentOut, AgentUpdate, DocumentOut, ManualContextRequest, QAPairCreate, QAPairOut
+from ..schemas import (
+    AgentCloneRequest,
+    AgentCreate,
+    AgentOut,
+    AgentTemplateOut,
+    AgentUpdate,
+    DocumentOut,
+    ManualContextRequest,
+    QAPairCreate,
+    QAPairOut,
+)
 from ..services.knowledge import embed_document_chunks
+from ..services.cloning import clone_agent
+from ..services.scoping import not_found, scope_to_agency
 
 
 router = APIRouter(prefix="/agents", tags=["Agents"])
@@ -21,30 +33,99 @@ MAX_PDF_BYTES = 20 * 1024 * 1024
 
 
 def _agent(db: Session, user: User, agent_id: uuid.UUID) -> Agent:
-    agent = db.scalar(
-        select(Agent)
-        .options(joinedload(Agent.client).selectinload(Client.agents))
-        .where(Agent.id == agent_id, Agent.agency_id == user.agency_id)
+    stmt = scope_to_agency(
+        select(Agent).options(joinedload(Agent.client).selectinload(Client.agents)).where(Agent.id == agent_id),
+        Agent,
+        user,
     )
+    agent = db.scalar(stmt)
     if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
+        raise not_found("Agent not found")
     return agent
 
 
 def _validate_client(db: Session, user: User, client_id: uuid.UUID) -> None:
-    client = db.scalar(select(Client).where(Client.id == client_id, Client.agency_id == user.agency_id))
-    if not client:
+    """A seller may only attach an agent to a client in their own portfolio."""
+    stmt = select(Client).where(Client.id == client_id, Client.agency_id == user.agency_id)
+    if not is_superadmin(user):
+        stmt = stmt.where(Client.created_by_user_id == user.id)
+    if not db.scalar(stmt):
         raise HTTPException(status_code=400, detail="The selected client does not exist")
 
 
 @router.get("", response_model=list[AgentOut])
 def list_agents(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return db.scalars(
-        select(Agent)
-        .options(joinedload(Agent.client).selectinload(Client.agents))
-        .where(Agent.agency_id == user.agency_id)
-        .order_by(Agent.created_at.desc())
-    ).unique().all()
+    stmt = scope_to_agency(
+        select(Agent).options(joinedload(Agent.client).selectinload(Client.agents)), Agent, user
+    )
+    return db.scalars(stmt.order_by(Agent.created_at.desc())).unique().all()
+
+
+@router.get("/templates", response_model=list[AgentTemplateOut])
+def list_templates(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Reusable agents shared across the agency.
+
+    Deliberately NOT portfolio-scoped: the point of the library is that a
+    template Edgar polished is available to Enedina. Only the configuration
+    summary is exposed — never the source client's conversations.
+    """
+    rows = db.execute(
+        select(Agent, Client.name, Client.industry)
+        .join(Client, Client.id == Agent.client_id)
+        .where(Agent.agency_id == user.agency_id, Agent.is_template.is_(True))
+        .order_by(Agent.updated_at.desc())
+    ).all()
+    return [
+        {
+            "id": agent.id,
+            "name": agent.name,
+            "template_label": agent.template_label or agent.name,
+            "description": agent.description,
+            "industry": industry or "",
+            "source_client_name": client_name,
+            "provider": agent.provider,
+            "model": agent.model,
+            "qa_count": len(agent.qa_pairs),
+            "document_count": len(agent.documents),
+            "tool_count": len(agent.tools),
+            "updated_at": agent.updated_at,
+        }
+        for agent, client_name, industry in rows
+    ]
+
+
+@router.post("/{agent_id}/clone", response_model=AgentOut, status_code=status.HTTP_201_CREATED)
+def clone(
+    agent_id: uuid.UUID,
+    payload: AgentCloneRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Copy an agent onto another client, as the starting point for a new one."""
+    # A shared template is clonable agency-wide; anything else only by whoever
+    # can already see it.
+    source = db.scalar(
+        select(Agent).where(
+            Agent.id == agent_id,
+            Agent.agency_id == user.agency_id,
+            Agent.is_template.is_(True),
+        )
+    )
+    if not source:
+        source = _agent(db, user, agent_id)
+    # The destination must be in the caller's own portfolio.
+    _validate_client(db, user, payload.client_id)
+
+    created = clone_agent(
+        db,
+        source,
+        target_client_id=payload.client_id,
+        agency_id=user.agency_id,
+        name=payload.name.strip(),
+        copy_documents=payload.copy_documents,
+    )
+    db.commit()
+    return _agent(db, user, created.id)
 
 
 @router.post("", response_model=AgentOut, status_code=status.HTTP_201_CREATED)

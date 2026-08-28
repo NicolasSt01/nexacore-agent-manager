@@ -18,6 +18,7 @@ from ..schemas import (
 )
 from ..security import hash_password
 from ..services import billing as billing_service
+from ..services.scoping import not_found, scope_clients
 from ..services import dns as dns_service
 from ..slugs import slugify, unique_slug
 
@@ -49,28 +50,19 @@ def _enrich_client_out(db: Session, client: Client) -> ClientOut:
     return out
 
 
-def _scope(stmt, user: User):
-    """Restrict a Client select to what the user may see: the whole agency for a
-    superadmin, only their own portfolio for a seller."""
-    stmt = stmt.where(Client.agency_id == user.agency_id)
-    if not is_superadmin(user):
-        stmt = stmt.where(Client.created_by_user_id == user.id)
-    return stmt
-
-
 def _client(db: Session, user: User, client_id: uuid.UUID) -> Client:
-    stmt = _scope(select(Client).options(selectinload(Client.agents)).where(Client.id == client_id), user)
+    stmt = scope_clients(select(Client).options(selectinload(Client.agents)).where(Client.id == client_id), user)
     client = db.scalar(stmt)
     if not client:
         # 404 rather than 403 on another seller's client: a 403 would confirm
         # the client exists and leak the size and shape of their portfolio.
-        raise HTTPException(status_code=404, detail="Client not found")
+        raise not_found("Client not found")
     return client
 
 
 @router.get("", response_model=list[ClientOut])
 def list_clients(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    stmt = _scope(select(Client).options(selectinload(Client.agents)), user)
+    stmt = scope_clients(select(Client).options(selectinload(Client.agents)), user)
     clients = db.scalars(stmt.order_by(Client.created_at.desc())).all()
     return [_enrich_client_out(db, client) for client in clients]
 

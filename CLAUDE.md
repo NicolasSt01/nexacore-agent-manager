@@ -73,6 +73,7 @@ Everything is agency-scoped: `Agency → Users, Clients, AIConnections`; `Client
 - `app/services/knowledge.py` — PDF text (pypdf on upload) is chunked and embedded; retrieval is semantic (cosine over embeddings stored as JSON) with keyword ranking as a fallback, then assembled into the system prompt
 - `app/security.py` — JWT in httpOnly cookies; AI API keys and WhatsApp session state are encrypted with a key derived from `ENCRYPTION_KEY` before hitting the DB
 - `app/ratelimit.py` — per-IP in-memory limiter used as a route dependency on public/unauthenticated endpoints (auth + portal login, widget messages); reads the client from `X-Forwarded-For` (set by the gateway); toggle with `RATE_LIMIT_ENABLED` (disabled in tests)
+- `app/services/seeding.py` — applies the declarative JSON seeds found in `app/seeds/` (or in `SEED_DIR`) on startup: an agency with its users, clients and agents. Create-only, so a restart never clobbers UI edits. Seeds hold no secrets (passwords and provider keys come from the env vars they name) but do hold private business data, so real seed files live in the gitignored `work/seeds/`, mounted read-only into the api container. Format: `app/seeds/README.md`
 - `migrations/` — Alembic; schema changes require a new migration, and Docker runs `alembic upgrade head` on backend start
 
 ### WhatsApp flow

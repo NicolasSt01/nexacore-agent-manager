@@ -16,9 +16,11 @@ from ..schemas import (
     PortalLoginRequest,
     PortalPublicOut,
     PortalSessionOut,
+    PortalUsageOut,
     SendMessageRequest,
 )
 from ..security import create_portal_token, decode_portal_token, verify_password
+from ..services.billing import get_quota_status
 from ..services.whatsapp import send_channel_message
 
 
@@ -114,6 +116,63 @@ def portal_login(slug: str, payload: PortalLoginRequest, response: Response, db:
 @router.post("/{slug}/logout", status_code=status.HTTP_204_NO_CONTENT)
 def portal_logout(response: Response):
     response.delete_cookie("portal_access_token", path="/")
+
+
+@router.get("/{slug}/usage", response_model=PortalUsageOut)
+def portal_usage(slug: str, client: Client = Depends(_portal_client), db: Session = Depends(get_db)):
+    """The client's own consumption and service KPIs.
+
+    Deliberately limited: tokens against their package, and how many
+    conversations the agent handled versus a person. No cost, no margin — that
+    is NexaCore's business, not the client's.
+    """
+    quota = get_quota_status(db, client)
+
+    since = quota["cycle_start"]
+    conversations = db.scalar(
+        select(func.count(Conversation.id)).where(
+            Conversation.client_id == client.id, Conversation.updated_at >= since
+        )
+    ) or 0
+    human_conversations = db.scalar(
+        select(func.count(Conversation.id)).where(
+            Conversation.client_id == client.id,
+            Conversation.mode == "human",
+            Conversation.updated_at >= since,
+        )
+    ) or 0
+    ai_messages = db.scalar(
+        select(func.count(Message.id))
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .where(
+            Conversation.client_id == client.id,
+            Message.sender_type == "ai",
+            Message.created_at >= since,
+        )
+    ) or 0
+    human_messages = db.scalar(
+        select(func.count(Message.id))
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .where(
+            Conversation.client_id == client.id,
+            Message.sender_type == "human",
+            Message.created_at >= since,
+        )
+    ) or 0
+
+    return {
+        "used_tokens": quota["used_tokens"],
+        "limit_tokens": quota["limit_tokens"],
+        "percentage_used": quota["percentage_used"],
+        "is_blocked": quota["is_blocked"],
+        "unlimited": not quota["limit_tokens"],
+        "cycle_start": quota["cycle_start"],
+        "cycle_end": quota["cycle_end"],
+        "conversations": int(conversations),
+        "human_conversations": int(human_conversations),
+        "ai_messages": int(ai_messages),
+        "human_messages": int(human_messages),
+    }
 
 
 @router.get("/{slug}/me", response_model=PortalSessionOut)

@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, LargeBinary, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, LargeBinary, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -88,6 +88,10 @@ class Client(Base):
     # Cycle cut day, taken from the signup date: a client registered on the 12th
     # cuts on the 12th of every month. See services/billing.cycle_window.
     billing_anchor_day: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # Stamps for the once-per-cycle quota notifications, so a hundred messages
+    # arriving after the limit do not send a hundred emails.
+    quota_warned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    quota_blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     encrypted_client_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
@@ -108,6 +112,52 @@ class Client(Base):
     @property
     def portal_password_configured(self) -> bool:
         return bool(self.portal_password_hash)
+
+
+class AgencySettings(Base):
+    """Global, superadmin-managed settings for one agency.
+
+    Kept apart from Agency (branding, shown to everyone) because these are
+    operational secrets: only a superadmin reads or writes them.
+    """
+
+    __tablename__ = "agency_settings"
+    __table_args__ = (UniqueConstraint("agency_id", name="uq_agency_settings_agency"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    agency_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agencies.id", ondelete="CASCADE"), index=True)
+
+    # --- Outbound email ----------------------------------------------------
+    emails_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    smtp_host: Mapped[str] = mapped_column(String(255), default="", server_default="")
+    smtp_port: Mapped[int] = mapped_column(Integer, default=587, server_default="587")
+    smtp_user: Mapped[str] = mapped_column(String(255), default="", server_default="")
+    encrypted_smtp_password: Mapped[str | None] = mapped_column(Text, nullable=True)
+    smtp_use_tls: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    smtp_from_email: Mapped[str] = mapped_column(String(320), default="", server_default="")
+    smtp_from_name: Mapped[str] = mapped_column(String(180), default="", server_default="")
+    # Where the daily model-catalog report and other owner alerts are sent.
+    owner_alert_email: Mapped[str] = mapped_column(String(320), default="", server_default="")
+
+    # --- Quota notifications ----------------------------------------------
+    notify_seller_on_quota: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    notify_client_on_quota: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+    # --- Shared subscription pool (circuit breaker) ------------------------
+    # Past this share of the pool, agents fall back to a model that does not
+    # consume it, instead of every client failing at once.
+    pool_degrade_percent: Mapped[int] = mapped_column(Integer, default=80, server_default="80")
+    # Past this, stop replying and hand over to a human.
+    pool_block_percent: Mapped[int] = mapped_column(Integer, default=95, server_default="95")
+    # Model used while degraded, e.g. "ox-alpha-free" (unlimited on OpenCode GO).
+    # Empty means no degradation step: go straight from OK to blocked.
+    pool_fallback_model: Mapped[str] = mapped_column(String(180), default="", server_default="")
+    # Owner alert once any window crosses this.
+    pool_alert_percent: Mapped[int] = mapped_column(Integer, default=70, server_default="70")
+    pool_alerted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
 
 class ProviderCredential(Base):
@@ -156,8 +206,22 @@ class Agent(Base):
     # service (models that reject them fall back to their defaults).
     temperature: Mapped[float] = mapped_column(Float, default=0.7, server_default="0.7")
     max_tokens: Mapped[int] = mapped_column(Integer, default=2048, server_default="2048")
-    # How many past messages are kept as conversation memory.
-    memory_limit: Mapped[int] = mapped_column(Integer, default=30, server_default="30")
+    # --- Conversation memory (see services/history.py) ---------------------
+    # How many past messages are kept as conversation memory. 20 covers a full
+    # enquiry; more mostly drags stale context into the prompt.
+    memory_limit: Mapped[int] = mapped_column(Integer, default=20, server_default="20")
+    # A gap wider than this ends the session: a morning enquiry and its
+    # afternoon follow-up belong together, the next day does not. 0 disables.
+    session_gap_hours: Mapped[int] = mapped_column(Integer, default=6, server_default="6")
+    # Raw messages older than this never enter the prompt, whatever the count
+    # allows. Continuity beyond it is the job of the contact summary. 0 disables.
+    history_max_age_days: Mapped[int] = mapped_column(Integer, default=7, server_default="7")
+    # How long to wait for the contact to finish before replying. People write
+    # in fragments ("sí" … "para el lunes" … "en la mañana"); answering the
+    # first one produces three replies to half a thought. Each new message
+    # pushes the wait forward, so the agent answers the complete idea once.
+    # 0 replies immediately.
+    reply_delay_seconds: Mapped[int] = mapped_column(Integer, default=8, server_default="8")
     # Multimodal capabilities. When enabled, inbound images are described by a
     # vision model and inbound audio is transcribed before reaching the agent.
     image_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
@@ -171,6 +235,17 @@ class Agent(Base):
     widget_color: Mapped[str] = mapped_column(String(20), default="", server_default="")
     widget_position: Mapped[str] = mapped_column(String(10), default="right", server_default="right")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Shared as a reusable template: a polished agent (e.g. "Dental clinic
+    # receptionist") that any seller in the agency may clone onto a new client
+    # of the same kind. Sharing exposes only the configuration for cloning —
+    # never the source client's conversations or documents' ownership.
+    is_template: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    template_label: Mapped[str] = mapped_column(String(180), default="", server_default="")
+    # The template this agent was cloned from, kept so we can tell which
+    # templates are actually being reused.
+    cloned_from_agent_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("agents.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
@@ -378,7 +453,95 @@ class UsageRecord(Base):
     # Entry point that produced the usage: "whatsapp", "widget", "portal" or
     # "playground". Internal playground testing must not consume client quota.
     source: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    # --- Immutable cost snapshot -------------------------------------------
+    # Frozen at write time. Recomputing cost from today's prices would rewrite
+    # the margin of every past record the moment a provider changes a price.
+    input_price_per_1k_usd: Mapped[Decimal] = mapped_column(Numeric(12, 8), default=Decimal("0"), server_default="0")
+    output_price_per_1k_usd: Mapped[Decimal] = mapped_column(Numeric(12, 8), default=Decimal("0"), server_default="0")
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(14, 8), default=Decimal("0"), server_default="0")
+    usd_to_mxn: Mapped[Decimal] = mapped_column(Numeric(12, 6), default=Decimal("0"), server_default="0")
+    cost_mxn: Mapped[Decimal] = mapped_column(Numeric(14, 6), default=Decimal("0"), server_default="0")
+    # Where the price came from: "table", "catalog" or "unknown". Rows priced
+    # "unknown" are surfaced in finance so they get fixed instead of silently
+    # counting as zero cost.
+    price_source: Mapped[str] = mapped_column(String(20), default="unknown", server_default="unknown")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, index=True)
+
+
+class SubscriptionUsage(Base):
+    """A reading of a subscription provider's shared usage pool.
+
+    Subscription gateways (OpenCode Zen / GO) do not bill per token: they meter
+    one pool shared by every client on the key, with several windows at once
+    (a rolling one, weekly, monthly). If the pool runs out, **every** client on
+    that key stops at the same time — so the pool has to be watched, not the
+    per-client quota alone.
+
+    Snapshots are kept as history so we can learn the real capacity: how many
+    of our own tokens move the percentage how much.
+    """
+
+    __tablename__ = "subscription_usage"
+    __table_args__ = (Index("ix_subscription_usage_lookup", "agency_id", "provider", "captured_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    agency_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agencies.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(30))
+    # Highest percentage across all windows: the one that will actually stop us.
+    percent: Mapped[float] = mapped_column(Float, default=0.0)
+    # Per-window detail as returned by the provider, kept verbatim.
+    windows: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(20), default="ok", server_default="ok")
+    # Our own billable tokens at capture time, to correlate pool % with usage.
+    tokens_at_capture: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, index=True)
+
+
+class ModelPrice(Base):
+    """Versioned provider price for one model, in USD per 1,000 tokens.
+
+    Prices change over time and a change must never rewrite history: what was
+    earned yesterday stays as it was earned. So a price update is an INSERT of
+    a new row with a later `effective_from`, never an UPDATE, and each usage
+    record snapshots the price it actually used.
+    """
+
+    __tablename__ = "model_prices"
+    __table_args__ = (
+        UniqueConstraint("provider", "model", "effective_from", name="uq_model_prices_provider_model_from"),
+        Index("ix_model_prices_lookup", "provider", "model", "effective_from"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    provider: Mapped[str] = mapped_column(String(30))
+    model: Mapped[str] = mapped_column(String(180))
+    input_price_per_1k_usd: Mapped[Decimal] = mapped_column(Numeric(12, 8), default=Decimal("0"))
+    output_price_per_1k_usd: Mapped[Decimal] = mapped_column(Numeric(12, 8), default=Decimal("0"))
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, index=True)
+    # "catalog" when seeded from the static catalog, "manual" when a superadmin
+    # entered it, "sync" when the daily refresh picked up a provider change.
+    origin: Mapped[str] = mapped_column(String(20), default="manual", server_default="manual")
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class FxRate(Base):
+    """Daily USD->MXN reference rate. Providers bill in USD, NexaCore charges in
+    MXN, so the rate applied is snapshotted per usage record too."""
+
+    __tablename__ = "fx_rates"
+    __table_args__ = (UniqueConstraint("base", "quote", "rate_date", name="uq_fx_rates_pair_date"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    base: Mapped[str] = mapped_column(String(3), default="USD", server_default="USD")
+    quote: Mapped[str] = mapped_column(String(3), default="MXN", server_default="MXN")
+    rate: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+    rate_date: Mapped[date] = mapped_column(Date, index=True)
+    source: Mapped[str] = mapped_column(String(30), default="banxico_fix", server_default="banxico_fix")
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
 class Conversation(Base):
@@ -410,6 +573,18 @@ class Conversation(Base):
     external_chat_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     contact_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
     operator_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # --- Contact summary (see services/summary.py) --------------------------
+    # A compact card of who this contact is and what was left pending, rebuilt
+    # when a session closes. It carries continuity across days at a fixed cost,
+    # instead of dragging the whole transcript into every prompt.
+    contact_summary: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # created_at of the newest message the summary covers: tells us what is new
+    # to fold in, and how stale the card is.
+    contact_summary_through: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the pending batch of inbound messages should be answered. Set on
+    # every inbound message and pushed forward by the next one; the worker in
+    # services/replies.py picks it up. NULL means nothing is pending.
+    reply_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 

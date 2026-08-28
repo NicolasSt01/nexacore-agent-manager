@@ -31,6 +31,15 @@ bridge_token=$(openssl rand -hex 32)
   echo "COOKIE_SECURE=false"
   echo "COOKIE_SAMESITE=lax"
   echo
+  echo "# Startup seeds. Compose mounts ./work/seeds read-only at this path."
+  echo "SEED_ENABLED=true"
+  echo "SEED_DIR=/app/backend/seeds"
+  echo "SEED_RESET_PASSWORDS=false"
+  echo "# Override the seeded passwords / store the agency provider key on first boot."
+  echo "# SEED_OWNER_PASSWORD="
+  echo "# SEED_ADMIN_PASSWORD="
+  echo "# SEED_OPENCODE_GO_API_KEY="
+  echo
   echo "# Host ports. Change any that clash with other local services."
   echo "API_PORT=8000"
   echo "WEB_PORT=3000"

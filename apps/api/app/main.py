@@ -1,14 +1,12 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
 
 from .config import get_settings
-from .database import Base, SessionLocal, engine
-from .models import Agency, User
-from .security import hash_password
-from .slugs import unique_slug
+from .services import replies, scheduler, seeding
 from .routers import (
+    admin_settings,
     agency,
     agent_tools,
     agents,
@@ -29,44 +27,19 @@ from .routers import (
 )
 
 
-def seed_superadmin():
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    try:
-        email = "admin@nexacore.com.mx"
-        user = db.scalar(select(User).where(User.email == email))
-        if not user:
-            agency = db.scalar(select(Agency).where(Agency.name == "NexaCore"))
-            if not agency:
-                agency = Agency(name="NexaCore", slug=unique_slug(db, Agency, "slug", "NexaCore"))
-                db.add(agency)
-                db.flush()
-            user = User(
-                agency_id=agency.id,
-                name="Admin NexaCore",
-                email=email,
-                password_hash=hash_password("prueba123"),
-                role="superadmin",
-            )
-            db.add(user)
-            db.commit()
-            print(f"✅ Initial superadmin user '{email}' created successfully.")
-        else:
-            user.role = "superadmin"
-            user.password_hash = hash_password("prueba123")
-            db.commit()
-            print(f"✅ Superadmin password and role updated for '{email}'.")
-    except Exception as e:
-        db.rollback()
-        print(f"⚠️ Error seeding superadmin: {e}")
-    finally:
-        db.close()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    seed_superadmin()
-    yield
+    seeding.run_seeds()
+    tasks = [asyncio.create_task(replies.worker_loop())]
+    if scheduler.enabled():
+        tasks.append(asyncio.create_task(scheduler.daily_jobs_loop()))
+    try:
+        yield
+    finally:
+        for task in tasks:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 settings = get_settings()
@@ -95,6 +68,7 @@ def health():
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(agency.router, prefix="/api")
+app.include_router(admin_settings.router, prefix="/api")
 app.include_router(clients.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
 app.include_router(agent_tools.router, prefix="/api")

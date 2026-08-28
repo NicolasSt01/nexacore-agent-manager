@@ -10,6 +10,7 @@ from ..deps import get_current_user
 from ..models import Agent, Client, User, WhatsAppCloudChannel, new_public_id, now_utc
 from ..schemas_whatsapp_cloud import WhatsAppCloudChannelOut, WhatsAppCloudChannelUpdate
 from ..security import decrypt_secret, encrypt_secret
+from ..services.scoping import not_found, scope_clients, scope_to_agency
 from ..services.whatsapp_cloud import verify_phone_number
 
 
@@ -17,14 +18,14 @@ router = APIRouter(prefix="/whatsapp-cloud", tags=["WhatsApp Cloud"])
 
 
 def _channel_for_user(db: Session, user: User, client_id: uuid.UUID) -> WhatsAppCloudChannel:
-    channel = db.scalar(
-        select(WhatsAppCloudChannel).where(
-            WhatsAppCloudChannel.client_id == client_id,
-            WhatsAppCloudChannel.agency_id == user.agency_id,
-        )
+    stmt = scope_to_agency(
+        select(WhatsAppCloudChannel).where(WhatsAppCloudChannel.client_id == client_id),
+        WhatsAppCloudChannel,
+        user,
     )
+    channel = db.scalar(stmt)
     if not channel:
-        raise HTTPException(status_code=404, detail="This client does not have the WhatsApp API configured yet")
+        raise not_found("This client does not have the WhatsApp API configured yet")
     return channel
 
 
@@ -65,9 +66,9 @@ def configure_channel(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    client = db.scalar(select(Client).where(Client.id == client_id, Client.agency_id == user.agency_id))
+    client = db.scalar(scope_clients(select(Client).where(Client.id == client_id), user))
     if not client:
-        raise HTTPException(status_code=404, detail="Client not found")
+        raise not_found("Client not found")
     agent = db.scalar(
         select(Agent).where(
             Agent.id == payload.agent_id,

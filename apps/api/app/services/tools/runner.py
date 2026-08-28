@@ -42,8 +42,11 @@ async def run_completion(
     *,
     temperature: float | None = None,
     max_tokens: int | None = None,
+    model_override: str | None = None,
 ) -> Completion:
-    model = agent.model.strip()
+    # The circuit breaker swaps the model under subscription pressure, so the
+    # agent's configured model is a default, not a given.
+    model = (model_override or agent.model).strip()
     rows = db.scalars(select(AgentTool).where(AgentTool.agent_id == agent.id, AgentTool.enabled.is_(True))).all()
     specs = build_tool_specs(list(rows))
     if not specs:

@@ -11,7 +11,8 @@ import { useToast } from "@/components/toast";
 import { ChatPlayground } from "@/components/chat-playground";
 import { AgentToolsTab } from "@/components/agent-tools/agent-tools-tab";
 import { Combobox } from "@/components/combobox";
-import { PROVIDERS, modelsFor, estimateTokens, modelContextWindow, AUDIO_MODELS, IMAGE_MODELS } from "@/lib/providers";
+import { PROVIDERS, estimateTokens, modelContextWindow, AUDIO_MODELS, IMAGE_MODELS } from "@/lib/providers";
+import { modelsForProvider, useCatalog } from "@/lib/use-catalog";
 import { TIMEZONES } from "@/lib/timezones";
 import type { Agent, AgentTool, Client, KnowledgeDocument, QAPair } from "@/types";
 
@@ -19,6 +20,7 @@ type Tab = "details" | "knowledge" | "tools" | "widget" | "playground";
 
 export default function AgentDetailPage() {
   const t = useT();
+  const catalog = useCatalog();
   const toast = useToast();
   const { id } = useParams<{ id: string }>();
   const [agent, setAgent] = useState<Agent | null>(null);
@@ -61,12 +63,25 @@ export default function AgentDetailPage() {
     [agent],
   );
   const contextPct = Math.min(100, Math.round((promptTokens / contextWindow) * 100));
+  const [replyDelaySeconds, setReplyDelaySeconds] = useState(8);
+  const [sessionGapHours, setSessionGapHours] = useState(6);
+  const [historyMaxAgeDays, setHistoryMaxAgeDays] = useState(7);
+  const [isTemplate, setIsTemplate] = useState(false);
+  const [templateLabel, setTemplateLabel] = useState("");
   useEffect(() => { load(); }, [id]);
+  useEffect(() => {
+    if (!agent) return;
+    setIsTemplate(agent.is_template);
+    setTemplateLabel(agent.template_label);
+    setReplyDelaySeconds(agent.reply_delay_seconds);
+    setSessionGapHours(agent.session_gap_hours);
+    setHistoryMaxAgeDays(agent.history_max_age_days);
+  }, [agent?.id, agent?.is_template, agent?.template_label]);
 
   async function saveConfig(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true);
     const form = new FormData(event.currentTarget);
-    const payload = { client_id: form.get("client_id"), name: form.get("name"), description: form.get("description"), instructions: form.get("instructions"), personality: form.get("personality"), brief_summary: form.get("brief_summary"), brief_products: form.get("brief_products"), brief_audience: form.get("brief_audience"), brief_policies: form.get("brief_policies"), brief_goal: form.get("brief_goal"), brief_dos: form.get("brief_dos"), brief_donts: form.get("brief_donts"), provider, model, timezone, temperature, max_tokens: maxTokens, memory_limit: memoryLimit, image_enabled: imageEnabled, image_model: imageModel, audio_enabled: audioEnabled, audio_model: audioModel };
+    const payload = { client_id: form.get("client_id"), name: form.get("name"), description: form.get("description"), instructions: form.get("instructions"), personality: form.get("personality"), brief_summary: form.get("brief_summary"), brief_products: form.get("brief_products"), brief_audience: form.get("brief_audience"), brief_policies: form.get("brief_policies"), brief_goal: form.get("brief_goal"), brief_dos: form.get("brief_dos"), brief_donts: form.get("brief_donts"), provider, model, timezone, temperature, max_tokens: maxTokens, memory_limit: memoryLimit, reply_delay_seconds: replyDelaySeconds, session_gap_hours: sessionGapHours, history_max_age_days: historyMaxAgeDays, image_enabled: imageEnabled, image_model: imageModel, audio_enabled: audioEnabled, audio_model: audioModel, is_template: isTemplate, template_label: templateLabel };
     try { setAgent(await api<Agent>(`/agents/${id}`, { method: "PATCH", body: JSON.stringify(payload) })); toast.success(t("agents.detail.configSaved")); }
     catch (err) { toast.error(messageFrom(err)); } finally { setBusy(false); }
   }
@@ -152,12 +167,12 @@ export default function AgentDetailPage() {
       </div></section>
       <section className="settings-section"><div className="settings-copy"><h3>{t("agents.detail.aiModelHeading")}</h3><p>{t("agents.detail.aiModelCopy")}</p></div><div className="settings-fields">
         <label>{t("agents.detail.timezoneLabel")}<Combobox value={timezone} onChange={setTimezone} options={TIMEZONES} placeholder={t("agents.detail.timezoneLabel")} /></label>
-        <div className="form-grid"><label>{t("agents.detail.providerLabel")}<select value={provider} onChange={(e) => setProvider(e.target.value)}>{PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label><label>{t("agents.detail.modelLabel")}<Combobox value={model} onChange={setModel} options={modelsFor(provider)} placeholder={t("agents.detail.modelPlaceholder")} allowCustom /></label></div>
+        <div className="form-grid"><label>{t("agents.detail.providerLabel")}<select value={provider} onChange={(e) => setProvider(e.target.value)}>{PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label><label>{t("agents.detail.modelLabel")}<Combobox value={model} onChange={setModel} options={modelsForProvider(catalog, provider)} placeholder={t("agents.detail.modelPlaceholder")} allowCustom /></label></div>
         <div className="context-bar"><div style={{ width: `${contextPct}%` }} /><small><Sparkles size={12} /> {t("agents.detail.contextUsage", { count: promptTokens.toLocaleString("es"), total: contextWindow.toLocaleString("es") })}</small></div>
         <Alert type="info">{t("agents.detail.providerKeysPrefix")}<Link href="/settings">{t("agents.detail.settingsLink")}</Link>.</Alert>
         <div className="slider-field"><div className="slider-head"><span>{t("agents.detail.temperatureLabel")}</span><strong>{temperature.toFixed(1)}/2</strong></div><input type="range" min="0" max="2" step="0.1" value={temperature} onChange={(e) => setTemperature(Number(e.target.value))} /><span className="field-help">{t("agents.detail.temperatureHint")}</span></div>
         <div className="slider-field"><div className="slider-head"><span>{t("agents.detail.maxTokensLabel")}</span><strong>{maxTokens}/8192</strong></div><input type="range" min="256" max="8192" step="256" value={maxTokens} onChange={(e) => setMaxTokens(Number(e.target.value))} /><span className="field-help">{t("agents.detail.maxTokensHint")}</span></div>
-        <div className="slider-field"><div className="slider-head"><span>{t("agents.detail.memoryLimitLabel")}</span><strong>{memoryLimit}/100</strong></div><input type="range" min="0" max="100" step="1" value={memoryLimit} onChange={(e) => setMemoryLimit(Number(e.target.value))} /><span className="field-help">{t("agents.detail.memoryLimitHint")}</span></div>
+        <div className="slider-field"><div className="slider-head"><span>{t("agents.detail.memoryLimitLabel")}</span><strong>{memoryLimit}/100</strong></div><input type="range" min="0" max="100" step="1" value={memoryLimit} onChange={(e) => setMemoryLimit(Number(e.target.value))} /><label style={{ marginTop: 14, display: "block" }}>{t("agents.detail.replyDelayLabel")}<input type="number" min={0} max={120} value={replyDelaySeconds} onChange={(e) => setReplyDelaySeconds(Number(e.target.value))} /><small>{t("agents.detail.replyDelayHint")}</small></label><div className="form-grid" style={{ marginTop: 14 }}><label>{t("agents.detail.sessionGapLabel")}<input type="number" min={0} max={168} value={sessionGapHours} onChange={(e) => setSessionGapHours(Number(e.target.value))} /><small>{t("agents.detail.sessionGapHint")}</small></label><label>{t("agents.detail.historyAgeLabel")}<input type="number" min={0} max={365} value={historyMaxAgeDays} onChange={(e) => setHistoryMaxAgeDays(Number(e.target.value))} /><small>{t("agents.detail.historyAgeHint")}</small></label></div><span className="field-help">{t("agents.detail.memoryLimitHint")}</span></div>
       </div></section>
       <section className="settings-section"><div className="settings-copy"><h3>{t("agents.detail.capabilitiesHeading")}</h3><p>{t("agents.detail.capabilitiesCopy")}</p></div><div className="settings-fields">
         <div className="capability">
@@ -170,7 +185,7 @@ export default function AgentDetailPage() {
         </div>
         <Alert type="info">{t("agents.detail.capabilitiesOpenAI")}</Alert>
       </div></section>
-      <div className="sticky-save"><span>{t("agents.detail.stickyNote")}</span><button className="button primary" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />} {t("agents.detail.saveConfig")}</button></div>
+      <section className="form-section"><div className="section-copy"><h2>{t("finance.templates.markTemplate")}</h2><p>{t("finance.templates.markTemplateHint")}</p></div><div className="form-fields"><label className="switch-row"><span><strong>{t("finance.templates.markTemplate")}</strong><small>{t("finance.templates.markTemplateHint")}</small></span><input type="checkbox" checked={isTemplate} onChange={(e) => setIsTemplate(e.target.checked)} /></label>{isTemplate && <label>{t("finance.templates.templateLabel")}<input value={templateLabel} onChange={(e) => setTemplateLabel(e.target.value)} placeholder={agent.name} /><small>{t("finance.templates.templateLabelHint")}</small></label>}</div></section><div className="sticky-save"><span>{t("agents.detail.stickyNote")}</span><button className="button primary" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />} {t("agents.detail.saveConfig")}</button></div>
     </form>}
 
     {tab === "knowledge" && <><div className="knowledge-layout">

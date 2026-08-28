@@ -7,7 +7,7 @@ import { Alert, EmptyState } from "@/components/ui";
 import { api, ApiError, messageFrom } from "@/lib/api";
 import { formatWhen, isNearBottom, isSameOpenThread } from "@/lib/datetime";
 import { useLanguage, useT } from "@/lib/i18n";
-import type { Conversation, PortalPublic } from "@/types";
+import type { Conversation, PortalPublic, PortalUsage } from "@/types";
 
 const POLL_MS = 8000;
 
@@ -29,10 +29,63 @@ export default function PortalPage() {
   return <PortalInbox slug={slug} portal={portal} logout={logout} />;
 }
 
+function PortalUsagePanel({ usage }: { usage: PortalUsage }) {
+  const t = useT();
+  const pct = usage.unlimited ? 0 : Math.min(100, usage.percentage_used);
+  const level = usage.is_blocked ? "danger" : pct >= 80 ? "warning" : "ok";
+  const handled = usage.ai_messages + usage.human_messages;
+  const aiShare = handled ? Math.round((usage.ai_messages / handled) * 100) : 0;
+
+  return (
+    <section className={`portal-usage usage-${level}`}>
+      <div className="portal-usage-main">
+        <div className="usage-bar-head">
+          <strong>{t("portal.plan.usageHeading")}</strong>
+          <span>
+            {usage.unlimited
+              ? t("portal.plan.usageUnlimited", { used: usage.used_tokens.toLocaleString() })
+              : t("portal.plan.usageOf", {
+                  used: usage.used_tokens.toLocaleString(),
+                  limit: usage.limit_tokens.toLocaleString(),
+                })}
+          </span>
+        </div>
+        {!usage.unlimited && (
+          <div className="usage-track" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+            <div className="usage-fill" style={{ width: `${pct}%` }} />
+          </div>
+        )}
+        <div className="usage-bar-foot">
+          <span>
+            {usage.is_blocked
+              ? t("portal.plan.blocked")
+              : pct >= 80
+                ? t("portal.plan.warning")
+                : t("portal.plan.ok")}
+          </span>
+          <small>
+            {t("portal.plan.cycleRange", {
+              start: new Date(usage.cycle_start).toLocaleDateString(),
+              end: new Date(usage.cycle_end).toLocaleDateString(),
+            })}
+          </small>
+        </div>
+      </div>
+      <div className="portal-usage-kpis">
+        <div><strong>{usage.conversations}</strong><small>{t("portal.plan.conversations")}</small></div>
+        <div><strong>{usage.ai_messages}</strong><small>{t("portal.plan.handledByAi")}</small></div>
+        <div><strong>{usage.human_messages}</strong><small>{t("portal.plan.handledByHuman")}</small></div>
+        <div><strong>{aiShare}%</strong><small>{t("portal.plan.aiShare", { pct: aiShare })}</small></div>
+      </div>
+    </section>
+  );
+}
+
 function PortalInbox({ slug, portal, logout }: { slug: string; portal: PortalPublic; logout: () => void }) {
   const t = useT();
   const { lang } = useLanguage();
   const [items, setItems] = useState<Conversation[]>([]);
+  const [usage, setUsage] = useState<PortalUsage | null>(null);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -56,6 +109,9 @@ function PortalInbox({ slug, portal, logout }: { slug: string; portal: PortalPub
   const refresh = useCallback(async () => {
     const rows = await api<Conversation[]>(`/portal/${slug}/conversations`);
     setItems(rows);
+    // Usage rides along with the periodic refresh: the bar should move as the
+    // client's package is consumed, without a second polling loop.
+    api<PortalUsage>(`/portal/${slug}/usage`).then(setUsage).catch(() => {});
     const openId = selectedIdRef.current ?? rows[0]?.id;
     if (!openId) return;
     const conv = await api<Conversation>(`/portal/${slug}/conversations/${openId}`);
@@ -75,5 +131,5 @@ function PortalInbox({ slug, portal, logout }: { slug: string; portal: PortalPub
   }
   async function setMode(mode: "ai" | "human") { if (!selected) return; setSelected(await api<Conversation>(`/portal/${slug}/conversations/${selected.id}/mode`, { method: "PATCH", body: JSON.stringify({ mode }) })); await refresh(); }
   async function reply(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!selected) return; const form = event.currentTarget; const data = new FormData(form); setBusy(true); setError(""); try { setSelected(await api<Conversation>(`/portal/${slug}/conversations/${selected.id}/reply`, { method: "POST", body: JSON.stringify({ content: data.get("content") }) })); form.reset(); await refresh(); } catch (err) { setError(messageFrom(err)); } finally { setBusy(false); } }
-  return <main className="portal-app" style={{ "--portal-color": portal.agency_brand_color } as React.CSSProperties}><aside className="portal-nav"><div className="portal-brand">{portal.agency_logo_url ? <img src={`${portal.agency_logo_url}`} alt="Logo" /> : <span>{portal.agency_name.slice(0, 1)}</span>}<strong>{portal.client_name}</strong></div><nav><a className="active"><Inbox size={18} /> {t("portal.inbox.nav.inbox")}</a><a className="disabled"><Bot size={18} /> {t("portal.inbox.nav.agents")}</a></nav><button onClick={logout}><LogOut size={17} /> {t("portal.inbox.nav.logout")}</button></aside><section className="portal-main"><header><div><small>{t("portal.inbox.header.eyebrow")}</small><h1>{portal.portal_title}</h1></div><span>{t("portal.inbox.header.conversationsCount", { count: items.length })}</span></header>{items.length ? <div className="portal-inbox"><aside>{items.map((item) => <button key={item.id} onClick={() => choose(item)} className={selected?.id === item.id ? "active" : ""}><span className="entity-avatar tiny"><UserRound size={15} /></span><span><span className="portal-inbox-row-top"><strong>{item.title}</strong><time>{formatWhen(item.updated_at, lang)}</time></span><small className="portal-inbox-preview">{item.preview || t("portal.inbox.list.noMessages")}</small><small>{item.mode === "human" ? t("portal.inbox.list.humanSupport") : t("portal.inbox.list.aiAgent")}</small></span></button>)}</aside><section>{selected && <><header><div><strong>{selected.title}</strong><small>{t("portal.inbox.conversation.channel", { channel: selected.channel })}</small></div><button className={`mode-toggle ${selected.mode}`} onClick={() => setMode(selected.mode === "ai" ? "human" : "ai")}>{selected.mode === "ai" ? t("portal.inbox.conversation.takeControl") : t("portal.inbox.conversation.returnToAi")}</button></header><div className="portal-messages" ref={messagesRef}>{selected.messages?.map((message) => <article key={message.id} className={message.role}><small>{message.sender_name || (message.role === "assistant" ? t("portal.inbox.conversation.agent") : t("portal.inbox.conversation.visitor"))} · {formatWhen(message.created_at, lang)}</small><p>{message.content}</p></article>)}</div>{error && <Alert>{error}</Alert>}<form onSubmit={reply} className="portal-composer"><input name="content" required disabled={selected.mode !== "human" || busy} placeholder={selected.mode === "human" ? t("portal.inbox.conversation.replyPlaceholder") : t("portal.inbox.conversation.takeControlToReply")} /><button disabled={selected.mode !== "human" || busy}>{busy ? <LoaderCircle className="spin" size={18} /> : <Send size={18} />}</button></form></>}</section></div> : <EmptyState icon={<Inbox />} title={t("portal.inbox.empty.title")} description={t("portal.inbox.empty.description")} />}</section></main>;
+  return <main className="portal-app" style={{ "--portal-color": portal.agency_brand_color } as React.CSSProperties}><aside className="portal-nav"><div className="portal-brand">{portal.agency_logo_url ? <img src={`${portal.agency_logo_url}`} alt="Logo" /> : <span>{portal.agency_name.slice(0, 1)}</span>}<strong>{portal.client_name}</strong></div><nav><a className="active"><Inbox size={18} /> {t("portal.inbox.nav.inbox")}</a><a className="disabled"><Bot size={18} /> {t("portal.inbox.nav.agents")}</a></nav><button onClick={logout}><LogOut size={17} /> {t("portal.inbox.nav.logout")}</button></aside><section className="portal-main"><header><div><small>{t("portal.inbox.header.eyebrow")}</small><h1>{portal.portal_title}</h1></div><span>{t("portal.inbox.header.conversationsCount", { count: items.length })}</span></header>{usage && <PortalUsagePanel usage={usage} />}{items.length ? <div className="portal-inbox"><aside>{items.map((item) => <button key={item.id} onClick={() => choose(item)} className={selected?.id === item.id ? "active" : ""}><span className="entity-avatar tiny"><UserRound size={15} /></span><span><span className="portal-inbox-row-top"><strong>{item.title}</strong><time>{formatWhen(item.updated_at, lang)}</time></span><small className="portal-inbox-preview">{item.preview || t("portal.inbox.list.noMessages")}</small><small>{item.mode === "human" ? t("portal.inbox.list.humanSupport") : t("portal.inbox.list.aiAgent")}</small></span></button>)}</aside><section>{selected && <><header><div><strong>{selected.title}</strong><small>{t("portal.inbox.conversation.channel", { channel: selected.channel })}</small></div><button className={`mode-toggle ${selected.mode}`} onClick={() => setMode(selected.mode === "ai" ? "human" : "ai")}>{selected.mode === "ai" ? t("portal.inbox.conversation.takeControl") : t("portal.inbox.conversation.returnToAi")}</button></header><div className="portal-messages" ref={messagesRef}>{selected.messages?.map((message) => <article key={message.id} className={message.role}><small>{message.sender_name || (message.role === "assistant" ? t("portal.inbox.conversation.agent") : t("portal.inbox.conversation.visitor"))} · {formatWhen(message.created_at, lang)}</small><p>{message.content}</p></article>)}</div>{error && <Alert>{error}</Alert>}<form onSubmit={reply} className="portal-composer"><input name="content" required disabled={selected.mode !== "human" || busy} placeholder={selected.mode === "human" ? t("portal.inbox.conversation.replyPlaceholder") : t("portal.inbox.conversation.takeControlToReply")} /><button disabled={selected.mode !== "human" || busy}>{busy ? <LoaderCircle className="spin" size={18} /> : <Send size={18} />}</button></form></>}</section></div> : <EmptyState icon={<Inbox />} title={t("portal.inbox.empty.title")} description={t("portal.inbox.empty.description")} />}</section></main>;
 }

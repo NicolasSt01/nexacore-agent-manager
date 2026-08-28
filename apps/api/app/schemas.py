@@ -180,14 +180,38 @@ class WorkerMetrics(BaseModel):
     worker_email: str
     clients_count: int
     monthly_revenue_mxn: float
+    ai_cost_mxn: float
+    margin_mxn: float
     tokens_consumed: int
+
+
+class ClientFinanceMetrics(BaseModel):
+    client_id: uuid.UUID
+    client_name: str
+    seller_name: str
+    billing_mode: str
+    monthly_fee_mxn: float
+    ai_cost_mxn: float
+    margin_mxn: float
+    tokens_used: int
+    monthly_token_limit: int
+    usage_pct: float
+    is_blocked: bool
 
 
 class FinanceDashboardOut(BaseModel):
     total_clients: int
     total_monthly_revenue_mxn: float
+    # Real, from the immutable cost snapshot on each usage record.
+    total_ai_cost_mxn: float
+    total_margin_mxn: float
+    margin_pct: float
     total_tokens_consumed: int
+    # Usage that could not be priced; surfaced so it gets fixed rather than
+    # silently inflating the margin.
+    unpriced_usage_records: int
     workers_metrics: list[WorkerMetrics]
+    clients_metrics: list[ClientFinanceMetrics]
 
 
 class AgentBase(BaseModel):
@@ -208,7 +232,10 @@ class AgentBase(BaseModel):
     timezone: str = Field(default="UTC", max_length=64)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=2048, ge=1, le=32000)
-    memory_limit: int = Field(default=30, ge=0, le=200)
+    memory_limit: int = Field(default=20, ge=0, le=200)
+    session_gap_hours: int = Field(default=6, ge=0, le=168)
+    history_max_age_days: int = Field(default=7, ge=0, le=365)
+    reply_delay_seconds: int = Field(default=8, ge=0, le=120)
     image_enabled: bool = False
     image_model: str = Field(default="", max_length=180)
     audio_enabled: bool = False
@@ -217,6 +244,8 @@ class AgentBase(BaseModel):
     widget_greeting: str = Field(default="", max_length=2000)
     widget_color: str = Field(default="", max_length=20)
     widget_position: str = Field(default="right", pattern=r"^(right|left)$")
+    is_template: bool = False
+    template_label: str = Field(default="", max_length=180)
     is_active: bool = True
 
 
@@ -224,8 +253,35 @@ class AgentCreate(AgentBase):
     pass
 
 
+class AgentCloneRequest(BaseModel):
+    """Clone an existing agent onto another client."""
+    client_id: uuid.UUID
+    name: str = Field(min_length=1, max_length=180)
+    # Knowledge documents are copied with their pre-computed embeddings, so
+    # this is cheap; turn it off when the new client's material differs.
+    copy_documents: bool = True
+
+
+class AgentTemplateOut(BaseModel):
+    """Summary of a shared template, for the agency-wide library."""
+    id: uuid.UUID
+    name: str
+    template_label: str
+    description: str
+    industry: str
+    source_client_name: str
+    provider: str
+    model: str
+    qa_count: int
+    document_count: int
+    tool_count: int
+    updated_at: datetime
+
+
 class AgentUpdate(BaseModel):
     client_id: uuid.UUID | None = None
+    is_template: bool | None = None
+    template_label: str | None = Field(default=None, max_length=180)
     name: str | None = Field(default=None, min_length=1, max_length=180)
     description: str | None = None
     instructions: str | None = None
@@ -243,6 +299,9 @@ class AgentUpdate(BaseModel):
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     max_tokens: int | None = Field(default=None, ge=1, le=32000)
     memory_limit: int | None = Field(default=None, ge=0, le=200)
+    session_gap_hours: int | None = Field(default=None, ge=0, le=168)
+    history_max_age_days: int | None = Field(default=None, ge=0, le=365)
+    reply_delay_seconds: int | None = Field(default=None, ge=0, le=120)
     image_enabled: bool | None = None
     image_model: str | None = Field(default=None, max_length=180)
     audio_enabled: bool | None = None
@@ -257,6 +316,9 @@ class AgentUpdate(BaseModel):
 class AgentOut(ORMModel):
     id: uuid.UUID
     client_id: uuid.UUID
+    is_template: bool = False
+    template_label: str = ""
+    cloned_from_agent_id: uuid.UUID | None = None
     provider: str
     name: str
     description: str
@@ -275,6 +337,9 @@ class AgentOut(ORMModel):
     temperature: float
     max_tokens: int
     memory_limit: int
+    session_gap_hours: int = 6
+    history_max_age_days: int = 7
+    reply_delay_seconds: int = 8
     image_enabled: bool
     image_model: str
     audio_enabled: bool
@@ -411,6 +476,21 @@ class PortalSessionOut(BaseModel):
     client_name: str
     portal_slug: str
     agency_name: str
+
+
+class PortalUsageOut(BaseModel):
+    """What the client sees about their own consumption. No cost, no margin."""
+    used_tokens: int
+    limit_tokens: int
+    percentage_used: float
+    is_blocked: bool
+    unlimited: bool
+    cycle_start: datetime
+    cycle_end: datetime
+    conversations: int
+    human_conversations: int
+    ai_messages: int
+    human_messages: int
 
 
 class DashboardOut(BaseModel):

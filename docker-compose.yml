@@ -33,8 +33,20 @@ services:
       BACKEND_URL: http://api:8000
       WHATSAPP_BRIDGE_URL: http://whatsapp:3101
       STORAGE_DIR: /app/backend/storage
+      # Startup seeds. SEED_DIR points at the mounted directory below; leave the
+      # passwords empty to keep the ones bundled with the seed file, and set the
+      # provider key to have the seeded agency start with its AI credentials.
+      SEED_ENABLED: ${SEED_ENABLED:-true}
+      SEED_DIR: ${SEED_DIR:-}
+      SEED_RESET_PASSWORDS: ${SEED_RESET_PASSWORDS:-false}
+      SEED_OWNER_PASSWORD: ${SEED_OWNER_PASSWORD:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_OPENCODE_GO_API_KEY: ${SEED_OPENCODE_GO_API_KEY:-}
     volumes:
       - backend_storage:/app/backend/storage
+      # Private bootstrap data, kept out of the repository. Set
+      # SEED_DIR=/app/backend/seeds to load the JSON files placed here.
+      - ./work/seeds:/app/backend/seeds:ro
     ports:
       - "${BIND_HOST:-127.0.0.1}:${API_PORT:-8000}:8000"
     depends_on:

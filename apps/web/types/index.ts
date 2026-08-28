@@ -70,6 +70,9 @@ export type Agent = {
   temperature: number;
   max_tokens: number;
   memory_limit: number;
+  session_gap_hours: number;
+  history_max_age_days: number;
+  reply_delay_seconds: number;
   image_enabled: boolean;
   image_model: string;
   audio_enabled: boolean;
@@ -80,6 +83,10 @@ export type Agent = {
   widget_color: string;
   widget_position: string;
   is_active: boolean;
+  // Shared as a reusable template for the whole agency.
+  is_template: boolean;
+  template_label: string;
+  cloned_from_agent_id: string | null;
   client: Client;
   created_at: string;
   updated_at: string;
@@ -110,14 +117,51 @@ export type SellerMetrics = {
   worker_email: string;
   clients_count: number;
   monthly_revenue_mxn: number;
+  ai_cost_mxn: number;
+  margin_mxn: number;
   tokens_consumed: number;
+};
+
+export type ClientFinanceMetrics = {
+  client_id: string;
+  client_name: string;
+  seller_name: string;
+  billing_mode: string;
+  monthly_fee_mxn: number;
+  ai_cost_mxn: number;
+  margin_mxn: number;
+  tokens_used: number;
+  monthly_token_limit: number;
+  usage_pct: number;
+  is_blocked: boolean;
 };
 
 export type FinanceDashboard = {
   total_clients: number;
   total_monthly_revenue_mxn: number;
+  // Real, from the immutable cost snapshot on each usage record.
+  total_ai_cost_mxn: number;
+  total_margin_mxn: number;
+  margin_pct: number;
   total_tokens_consumed: number;
+  unpriced_usage_records: number;
   workers_metrics: SellerMetrics[];
+  clients_metrics: ClientFinanceMetrics[];
+};
+
+/** What the client sees about their own consumption. No cost, no margin. */
+export type PortalUsage = {
+  used_tokens: number;
+  limit_tokens: number;
+  percentage_used: number;
+  is_blocked: boolean;
+  unlimited: boolean;
+  cycle_start: string;
+  cycle_end: string;
+  conversations: number;
+  human_conversations: number;
+  ai_messages: number;
+  human_messages: number;
 };
 
 export type ProviderTest = { ok: boolean; message: string; models: string[] };
@@ -246,6 +290,94 @@ export type MetaChannel = {
   last_connected_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+/** One model from the backend catalog (/api/catalog/models). */
+export type CatalogModel = {
+  id: string;
+  provider: string;
+  label: string;
+  family: string;
+  context_window: number;
+  max_output_tokens: number;
+  supports_tools: boolean;
+  supports_vision: boolean;
+  input_price_per_1k: number;
+  output_price_per_1k: number;
+  badge: string;
+  note: string;
+};
+
+export type AgentTemplate = {
+  id: string;
+  name: string;
+  template_label: string;
+  description: string;
+  industry: string;
+  source_client_name: string;
+  provider: string;
+  model: string;
+  qa_count: number;
+  document_count: number;
+  tool_count: number;
+  updated_at: string;
+};
+
+export type AgencySettings = {
+  emails_enabled: boolean;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_user: string;
+  has_smtp_password: boolean;
+  smtp_use_tls: boolean;
+  smtp_from_email: string;
+  smtp_from_name: string;
+  owner_alert_email: string;
+  notify_seller_on_quota: boolean;
+  notify_client_on_quota: boolean;
+  pool_degrade_percent: number;
+  pool_block_percent: number;
+  pool_fallback_model: string;
+  pool_alert_percent: number;
+  updated_at: string;
+};
+
+export type ModelPrice = {
+  id: string;
+  provider: string;
+  model: string;
+  input_price_per_1k_usd: number;
+  output_price_per_1k_usd: number;
+  effective_from: string;
+  origin: string;
+  note: string;
+  created_at: string;
+};
+
+export type PoolWindow = { name: string; percent: number; status: string; resets_at: string };
+
+export type PoolStatus = {
+  provider: string;
+  label: string;
+  configured: boolean;
+  percent: number;
+  status: string;
+  degraded: boolean;
+  blocked: boolean;
+  windows: PoolWindow[];
+  captured_at: string | null;
+  tokens_at_capture: number;
+  // Measured capacity: our tokens per percentage point. Null until measured.
+  tokens_per_percent: number | null;
+};
+
+export type ModelSyncReport = {
+  checked_providers: string[];
+  unreachable: { provider: string; base_url: string }[];
+  retired: { provider: string; model: string }[];
+  new_models: { provider: string; model: string }[];
+  agents_at_risk: { client_name: string; agent_name: string; model: string }[];
+  has_changes: boolean;
 };
 
 export type PortalPublic = {

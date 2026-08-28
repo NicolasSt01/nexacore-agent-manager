@@ -63,6 +63,19 @@ const en = {
         "Conversations will appear here once your agents start receiving messages.",
     },
   },
+  plan: {
+    usageHeading: "Your plan this cycle",
+    usageOf: "{used} of {limit} messages",
+    usageUnlimited: "{used} messages · unlimited plan",
+    cycleRange: "Cycle from {start} to {end}",
+    blocked: "Your package ran out. Your assistant stopped replying automatically; messages still arrive and you can answer them here.",
+    warning: "You are close to your limit. Contact your advisor to extend your package.",
+    ok: "Within your package",
+    conversations: "Conversations",
+    handledByAi: "Answered by the assistant",
+    handledByHuman: "Answered by your team",
+    aiShare: "{pct}% handled automatically",
+  },
 };
 
 const es: typeof en = {
@@ -128,6 +141,19 @@ const es: typeof en = {
       description:
         "Las conversaciones aparecerán aquí cuando tus agentes empiecen a recibir mensajes.",
     },
+  },
+  plan: {
+    usageHeading: "Tu plan en este ciclo",
+    usageOf: "{used} de {limit} mensajes",
+    usageUnlimited: "{used} mensajes · plan ilimitado",
+    cycleRange: "Ciclo del {start} al {end}",
+    blocked: "Tu paquete se agotó. Tu asistente dejó de responder automáticamente; los mensajes siguen llegando y puedes contestarlos aquí.",
+    warning: "Estás cerca de tu límite. Contacta a tu asesor para ampliar tu paquete.",
+    ok: "Dentro de tu paquete",
+    conversations: "Conversaciones",
+    handledByAi: "Atendidas por el asistente",
+    handledByHuman: "Atendidas por tu equipo",
+    aiShare: "{pct}% atendido automáticamente",
   },
 };
 

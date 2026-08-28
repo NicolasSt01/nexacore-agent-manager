@@ -152,6 +152,93 @@ def test_only_superadmin_can_reassign_a_client(agency_with_sellers):
     assert moved.json()["created_by_user_id"] == ctx["enedina"]["id"]
 
 
+def test_seller_cannot_reach_another_sellers_agents(agency_with_sellers):
+    """Regression: only clients.py was scoped, so a seller could not see a
+    colleague's client in the list but still reached its agents by id."""
+    ctx = agency_with_sellers
+    api = ctx["client"]
+
+    _login(api, "edgar@prisma.com")
+    agent = api.post(
+        "/api/agents",
+        json={"client_id": ctx["edgar_client"]["id"], "name": "Recepcion", "provider": "openai", "model": "gpt-4.1-mini"},
+    ).json()
+
+    _login(api, "enedina@prisma.com")
+    listed = {row["id"] for row in api.get("/api/agents").json()}
+    assert agent["id"] not in listed
+    assert api.get(f"/api/agents/{agent['id']}").status_code == 404
+    assert api.patch(f"/api/agents/{agent['id']}", json={"name": "Robado"}).status_code == 404
+    assert api.delete(f"/api/agents/{agent['id']}").status_code == 404
+    # Tools hang off the agent, so they inherit the same boundary.
+    assert api.get(f"/api/agents/{agent['id']}/tools").status_code == 404
+
+
+def test_seller_cannot_attach_an_agent_to_another_sellers_client(agency_with_sellers):
+    ctx = agency_with_sellers
+    api = ctx["client"]
+    _login(api, "enedina@prisma.com")
+    response = api.post(
+        "/api/agents",
+        json={"client_id": ctx["edgar_client"]["id"], "name": "Colado", "provider": "openai", "model": "gpt-4.1-mini"},
+    )
+    assert response.status_code == 400
+
+
+def test_seller_cannot_reach_another_sellers_conversations(agency_with_sellers):
+    ctx = agency_with_sellers
+    api = ctx["client"]
+
+    _login(api, "edgar@prisma.com")
+    agent = api.post(
+        "/api/agents",
+        json={"client_id": ctx["edgar_client"]["id"], "name": "Recepcion", "provider": "openai", "model": "gpt-4.1-mini"},
+    ).json()
+    conversation = api.post("/api/conversations", json={"agent_id": agent["id"]}).json()
+
+    _login(api, "enedina@prisma.com")
+    assert conversation["id"] not in {row["id"] for row in api.get("/api/conversations").json()}
+    assert conversation["id"] not in {row["id"] for row in api.get("/api/conversations/inbox").json()}
+    assert api.get(f"/api/conversations/{conversation['id']}").status_code == 404
+    assert api.patch(f"/api/conversations/{conversation['id']}/mode", json={"mode": "human"}).status_code == 404
+    # Creating a conversation on someone else's agent must fail too.
+    assert api.post("/api/conversations", json={"agent_id": agent["id"]}).status_code == 400
+
+
+def test_seller_cannot_reach_another_sellers_channels(agency_with_sellers):
+    ctx = agency_with_sellers
+    api = ctx["client"]
+    other = ctx["edgar_client"]["id"]
+
+    _login(api, "enedina@prisma.com")
+    assert api.get(f"/api/whatsapp/channels/{other}").status_code == 404
+    assert api.get(f"/api/whatsapp-cloud/channels/{other}").status_code == 404
+    assert api.get(f"/api/meta/messenger/channels/{other}").status_code == 404
+    assert api.get(f"/api/meta/instagram/channels/{other}").status_code == 404
+    # Configuring a channel on another seller's client must not create one.
+    assert api.put(
+        f"/api/meta/messenger/channels/{other}",
+        json={"agent_id": ctx["edgar"]["id"], "account_id": "x"},
+    ).status_code == 404
+
+
+def test_superadmin_still_reaches_everything(agency_with_sellers):
+    ctx = agency_with_sellers
+    api = ctx["client"]
+
+    _login(api, "edgar@prisma.com")
+    agent = api.post(
+        "/api/agents",
+        json={"client_id": ctx["edgar_client"]["id"], "name": "Recepcion", "provider": "openai", "model": "gpt-4.1-mini"},
+    ).json()
+    conversation = api.post("/api/conversations", json={"agent_id": agent["id"]}).json()
+
+    _login(api, "ana@prisma.com")
+    assert api.get(f"/api/agents/{agent['id']}").status_code == 200
+    assert api.get(f"/api/conversations/{conversation['id']}").status_code == 200
+    assert agent["id"] in {row["id"] for row in api.get("/api/agents").json()}
+
+
 # --- Token accounting -----------------------------------------------------
 
 
