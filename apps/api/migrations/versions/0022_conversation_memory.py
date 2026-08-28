@@ -1,15 +1,15 @@
 """Per-agent conversation memory: session gap and history age cap.
 
-Revision ID: 0022_conversation_memory_settings
-Revises: 0021_pricing_fx_and_agency_settings
+Revision ID: 0022_conversation_memory
+Revises: 0021_pricing_fx_agency_settings
 """
 
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0022_conversation_memory_settings"
-down_revision = "0021_pricing_fx_and_agency_settings"
+revision = "0022_conversation_memory"
+down_revision = "0021_pricing_fx_agency_settings"
 branch_labels = None
 depends_on = None
 

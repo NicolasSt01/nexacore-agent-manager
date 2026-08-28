@@ -1,7 +1,7 @@
 """Shared subscription pool: usage snapshots and circuit-breaker thresholds.
 
 Revision ID: 0023_subscription_pool
-Revises: 0022_conversation_memory_settings
+Revises: 0022_conversation_memory
 """
 
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 
 revision = "0023_subscription_pool"
-down_revision = "0022_conversation_memory_settings"
+down_revision = "0022_conversation_memory"
 branch_labels = None
 depends_on = None
 

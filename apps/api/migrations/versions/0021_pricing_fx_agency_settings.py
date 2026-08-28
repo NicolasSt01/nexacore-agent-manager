@@ -1,6 +1,6 @@
 """Versioned model prices, FX rates, cost snapshots and agency settings.
 
-Revision ID: 0021_pricing_fx_and_agency_settings
+Revision ID: 0021_pricing_fx_agency_settings
 Revises: 0020_agent_templates
 """
 
@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0021_pricing_fx_and_agency_settings"
+revision = "0021_pricing_fx_agency_settings"
 down_revision = "0020_agent_templates"
 branch_labels = None
 depends_on = None
