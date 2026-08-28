@@ -1090,3 +1090,10 @@ input:focus, textarea:focus, select:focus { border-color: #3b8ca0; box-shadow: 0
   .portal-usage { grid-template-columns: 1fr; }
   .portal-usage-kpis { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* NexaCore wordmark: "Nexa" primario y "Core" en Signal (design system v1.0).
+   Sobre fondos claros, "Core" usa Signal 700 por contraste. */
+.brand .brand-core,
+.access-brand strong .brand-core {
+  color: #006C99;
+}

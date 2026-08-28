@@ -33,7 +33,7 @@ export default function LoginPage() {
   return (
     <main className="access-page agency-access">
       <header className="access-topbar">
-        <div className="access-brand"><span className="nexacore-icon"><img src="/brand/nexacore-logo.png" alt="" /></span><strong>NexaCore</strong></div>
+        <div className="access-brand"><span className="nexacore-icon"><img src="/brand/nexacore-logo.png" alt="" /></span><strong>Nexa<span className="brand-core">Core</span></strong></div>
         <small>{t("auth.tagline")}</small>
       </header>
       <div className="access-layout">
