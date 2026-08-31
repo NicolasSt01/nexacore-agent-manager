@@ -6,6 +6,11 @@ from fastapi import HTTPException
 
 ANTHROPIC_VERSION = "2023-06-01"
 
+# Providers that speak the OpenAI /chat/completions shape and have no /responses
+# endpoint. Kept here so the plain-completion path and the tool-calling loop in
+# services/tools/runner.py can never disagree about which API a provider talks.
+CHAT_COMPLETIONS_PROVIDERS = ("openrouter", "deepseek", "qwen", "opencode", "opencode_go")
+
 
 @dataclass
 class Completion:
@@ -35,7 +40,7 @@ async def chat_completion(
     try:
         if provider == "anthropic":
             return await _anthropic_messages(base_url, api_key, model, messages, temperature, max_tokens)
-        if provider in ("openrouter", "deepseek", "qwen", "opencode", "opencode_go"):
+        if provider in CHAT_COMPLETIONS_PROVIDERS:
             return await _openai_chat_completions(base_url, api_key, model, messages, temperature, max_tokens)
         try:
             return await _openai_responses(base_url, api_key, model, messages, temperature, max_tokens)

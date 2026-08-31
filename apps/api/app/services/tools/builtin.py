@@ -23,6 +23,8 @@ SCHEDULE_DESCRIPTION = (
     "por correo a la persona y al negocio, con un botón para agregarla a su calendario.\n\n"
     "Cuándo usarla: solo después de haber acordado con la persona una fecha y una hora concretas "
     "y de tener sus datos. Nunca la llames para consultar disponibilidad ni con datos inventados. "
+    "El resumen que escribas es lo que el negocio leerá para llegar preparado a la cita, así que "
+    "cuenta lo que la persona necesita, no lo que tú harás. "
     "Si la herramienta responde que el horario está ocupado, ofrece otro horario y vuelve a "
     "intentarlo. Después de agendar, confirma en el chat la fecha y la hora en palabras."
 )
@@ -50,13 +52,21 @@ def _schedule_schema(agent: Agent) -> dict:
         "contact_email": {"type": "string", "description": "Correo de la persona, para enviarle la confirmación."},
         "contact_phone": {"type": "string", "description": "Teléfono de contacto, si lo tienes."},
         "reason": {"type": "string", "description": "Motivo de la cita, en pocas palabras."},
-        "notes": {"type": "string", "description": "Detalles útiles para quien la atenderá."},
+        "summary": {
+            "type": "string",
+            "description": (
+                "Resumen de la conversación en 2 a 4 frases: qué necesita la persona, qué se acordó "
+                "y cualquier dato que ayude a quien la atenderá a llegar preparado. Escríbelo sólo "
+                "con lo que la persona dijo; no inventes ni supongas nada."
+            ),
+        },
+        "notes": {"type": "string", "description": "Detalles puntuales para quien la atenderá."},
         "duration_minutes": {
             "type": "integer",
             "description": f"Duración en minutos. Por defecto {agent.scheduling_duration_minutes}.",
         },
     }
-    required = ["starts_at", "contact_name"]
+    required = ["starts_at", "contact_name", "summary"]
     if agent.scheduling_require_email:
         required.append("contact_email")
     return {"type": "object", "properties": properties, "required": required}
@@ -88,6 +98,7 @@ def _schedule(context: ToolContext, args: dict) -> tuple[str, bool]:
             contact_email=str(args.get("contact_email") or ""),
             contact_phone=str(args.get("contact_phone") or ""),
             reason=str(args.get("reason") or ""),
+            summary=str(args.get("summary") or ""),
             notes=str(args.get("notes") or ""),
             duration_minutes=args.get("duration_minutes"),
         )

@@ -1,12 +1,15 @@
 """Provider tool-calling loops over raw HTTP payloads.
 
-Mirrors the request building in services/ai.py (OpenAI Responses API and
-Anthropic Messages API) but keeps requesting until the model stops asking for
-tools. Mid-loop responses may contain no text, so this module never routes
-them through the plain-completion text extractors until the loop ends.
+One loop per wire format, mirroring the request building in services/ai.py:
+Anthropic Messages, the OpenAI Responses API, and the OpenAI
+/chat/completions shape that every other provider implements. Mid-loop
+responses may contain no text, so this module never routes them through the
+plain-completion text extractors until the loop ends.
 """
 
 import json
+
+from fastapi import HTTPException
 
 from ..ai import ANTHROPIC_VERSION, Completion, _post_json, extract_openai_text
 from .builtin import ToolContext, execute_builtin
@@ -16,6 +19,15 @@ from .specs import ToolSpec, find_spec
 
 MAX_TOOL_ITERATIONS = 5
 RESULT_PREVIEW_CHARS = 500
+
+
+class ResponsesUnsupported(Exception):
+    """The endpoint rejected the very first Responses API request.
+
+    Raised only before any tool has run, so the caller can safely retry on the
+    /chat/completions loop. Once a tool has executed the run is not repeatable:
+    re-running it would book the same appointment twice.
+    """ 
 
 
 async def _execute(spec: ToolSpec, args: dict, context: ToolContext | None) -> tuple[str, bool]:
@@ -108,7 +120,16 @@ async def openai_tool_loop(
             payload["instructions"] = instructions
         if iteration == MAX_TOOL_ITERATIONS:
             payload["tool_choice"] = "none"
-        data = await _post_json(url, headers, payload, sampling)
+        if iteration == 0:
+            # Nothing has run yet, so a rejection here is recoverable: the
+            # caller falls back to /chat/completions for endpoints that do not
+            # implement the Responses API.
+            try:
+                data = await _post_json(url, headers, payload, sampling)
+            except HTTPException as exc:
+                raise ResponsesUnsupported(str(exc.detail)) from exc
+        else:
+            data = await _post_json(url, headers, payload, sampling)
         usage = data.get("usage") or {}
         input_tokens += int(usage.get("input_tokens") or 0)
         output_tokens += int(usage.get("output_tokens") or 0)
@@ -130,4 +151,69 @@ async def openai_tool_loop(
                 result, is_error = await _execute(spec, args, context)
             _record(metadata, call.get("name", ""), args, result, is_error)
             input_items.append({"type": "function_call_output", "call_id": call.get("call_id"), "output": result})
+    raise ValueError("tool loop did not converge")
+
+
+async def openai_chat_tool_loop(
+    base_url: str, api_key: str, model: str, messages: list[dict], specs: list[ToolSpec],
+    temperature: float | None, max_tokens: int | None, context: ToolContext | None = None,
+) -> Completion:
+    """Tool calling over /chat/completions, which every OpenAI-compatible
+    provider implements — OpenRouter, DeepSeek, Qwen and OpenCode among them.
+
+    Without this they could only ever run plain completions: the Responses API
+    they do not implement would 404 on the first request and take the whole
+    reply down with it, not just the tool call.
+    """
+    url = f"{base_url.rstrip('/')}/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    convo: list[dict] = [{"role": m["role"], "content": m["content"]} for m in messages]
+    tools = [
+        {"type": "function", "function": {"name": s.name, "description": s.description, "parameters": s.input_schema}}
+        for s in specs
+    ]
+    sampling: dict = {}
+    if temperature is not None:
+        sampling["temperature"] = temperature
+    if max_tokens is not None:
+        sampling["max_tokens"] = max_tokens
+    input_tokens = output_tokens = 0
+    metadata: list[dict] = []
+
+    for iteration in range(MAX_TOOL_ITERATIONS + 1):
+        payload: dict = {"model": model, "messages": convo, "tools": tools}
+        if iteration == MAX_TOOL_ITERATIONS:
+            payload["tool_choice"] = "none"
+        data = await _post_json(url, headers, payload, sampling)
+        usage = data.get("usage") or {}
+        input_tokens += int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
+        output_tokens += int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)
+        choices = data.get("choices") or []
+        message = (choices[0].get("message") or {}) if choices else {}
+        calls = message.get("tool_calls") or []
+        if not calls:
+            text = (message.get("content") or "").strip()
+            if not text:
+                raise ValueError("empty response")
+            return Completion(text, input_tokens, output_tokens, tool_calls=metadata or None)
+        # Echo back only the fields the API defines. Providers decorate the
+        # message with their own extras (reasoning traces, annotations) and
+        # some reject those same extras on the way in.
+        convo.append({"role": "assistant", "content": message.get("content"), "tool_calls": calls})
+        for call in calls:
+            function = call.get("function") or {}
+            name = function.get("name", "")
+            try:
+                args = json.loads(function.get("arguments") or "{}")
+            except ValueError:
+                args = {}
+            if not isinstance(args, dict):
+                args = {}
+            spec = find_spec(specs, name)
+            if spec is None:
+                result, is_error = f"Error: unknown tool '{name}'", True
+            else:
+                result, is_error = await _execute(spec, args, context)
+            _record(metadata, name, args, result, is_error)
+            convo.append({"role": "tool", "tool_call_id": call.get("id"), "content": result})
     raise ValueError("tool loop did not converge")

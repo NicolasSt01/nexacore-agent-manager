@@ -685,6 +685,10 @@ class Appointment(Base):
     contact_phone: Mapped[str] = mapped_column(String(60), default="", server_default="")
     title: Mapped[str] = mapped_column(String(240), default="", server_default="")
     notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # What the conversation was about, so whoever attends walks in prepared
+    # instead of reading the whole thread. Written by the agent when it books;
+    # falls back to the conversation's contact summary.
+    summary: Mapped[str] = mapped_column(Text, default="", server_default="")
     location: Mapped[str] = mapped_column(String(255), default="", server_default="")
     # Always UTC in the database; `timezone` is the IANA zone it was booked in,
     # kept so the calendar file and the emails read back in local time.

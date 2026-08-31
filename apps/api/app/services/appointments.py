@@ -26,6 +26,7 @@ from ..models import Agency, Agent, Appointment, Client, Conversation, now_utc
 from . import calendar_invite
 from .email_render import render_html, render_text
 from .mailer import Attachment, send_email
+from .summary import usable_summary
 
 
 logger = logging.getLogger("nexacore.appointments")
@@ -119,6 +120,7 @@ def book(
     contact_phone: str = "",
     reason: str = "",
     notes: str = "",
+    summary: str = "",
     duration_minutes: int | None = None,
 ) -> Appointment:
     """Validate and store the booking. Raises BookingError with agent-facing copy."""
@@ -167,6 +169,10 @@ def book(
         contact_phone=(contact_phone or "").strip()[:60],
         title=(reason or "").strip()[:240] or f"Cita en {agent.client.name}",
         notes=(notes or "").strip(),
+        # The agent's own recap of the conversation. When it writes none, the
+        # contact card kept by services/summary.py is the next best thing —
+        # better a machine summary than sending the business nothing at all.
+        summary=(summary or "").strip() or (usable_summary(conversation) if conversation else ""),
         location=agent.scheduling_location or "",
         starts_at=start,
         ends_at=end,
@@ -266,7 +272,11 @@ def notify(db: Session, appointment: Appointment) -> BookingResult:
         owner_buttons = [*buttons]
         panel = f"{get_settings().frontend_url.rstrip('/')}/clients/{client.id}"
         owner_buttons.append(("Ver en el panel", panel))
-        notes = appointment.notes.strip()
+        notes = (appointment.notes or "").strip()
+        sections = [
+            ("Resumen de la conversación", (appointment.summary or "").strip()),
+            ("Notas", notes),
+        ]
         owner_sent = send_email(
             db,
             appointment.agency_id,
@@ -281,17 +291,19 @@ def notify(db: Session, appointment: Appointment) -> BookingResult:
                 title="Tienes una cita nueva",
                 intro=f"{agent.name} agendó una cita durante una conversación. Estos son los datos.",
                 rows=rows,
+                sections=sections,
                 buttons=owner_buttons,
                 buttons_caption="Agrégala a tu calendario:",
-                note=f"Notas de la conversación: {notes}" if notes else "",
+                note="",
                 footer="NexaCore Agent Manager · Aviso automático.",
             ),
             body_text=render_text(
                 title="Tienes una cita nueva",
                 intro=f"{agent.name} agendó una cita durante una conversación.",
                 rows=rows,
+                sections=sections,
                 buttons=owner_buttons,
-                note=f"Notas: {notes}" if notes else "",
+                note="",
                 footer="NexaCore Agent Manager",
             ),
             attachments=[ics],

@@ -66,7 +66,10 @@ def _fold(line: str) -> str:
 
 
 def description_for(appointment: Appointment) -> str:
-    parts = [appointment.notes.strip()]
+    """What the calendar event says once it is in someone's calendar."""
+    # Tolerate None: a column default only materialises on flush, so an
+    # in-memory appointment can still have unset text fields.
+    parts = [(appointment.summary or "").strip(), (appointment.notes or "").strip()]
     if appointment.contact_name:
         parts.append(f"Contacto: {appointment.contact_name}")
     if appointment.contact_phone:

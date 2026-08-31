@@ -60,6 +60,27 @@ def _detail_rows(rows: list[tuple[str, str]]) -> str:
     )
 
 
+def _sections(sections: list[tuple[str, str]]) -> str:
+    """Prose blocks: a heading and one or more paragraphs of running text."""
+    blocks = []
+    for heading, body in sections:
+        if not (body or "").strip():
+            continue
+        paragraphs = "".join(
+            f'<p style="margin:0 0 10px;font-family:Helvetica,Arial,sans-serif;font-size:14px;'
+            f'line-height:1.6;color:{TEXT};">{escape(chunk.strip())}</p>'
+            for chunk in body.strip().split("\n")
+            if chunk.strip()
+        )
+        blocks.append(
+            f'<div style="margin:22px 0 0;">'
+            f'<h2 style="margin:0 0 8px;font-family:Helvetica,Arial,sans-serif;font-size:13px;'
+            f'text-transform:uppercase;letter-spacing:.6px;color:{MUTED};">{escape(heading)}</h2>'
+            f"{paragraphs}</div>"
+        )
+    return "".join(blocks)
+
+
 def render_html(
     *,
     brand_name: str,
@@ -67,6 +88,7 @@ def render_html(
     title: str,
     intro: str,
     rows: list[tuple[str, str]],
+    sections: list[tuple[str, str]] | None = None,
     buttons: list[tuple[str, str]] | None = None,
     buttons_caption: str = "",
     note: str = "",
@@ -109,6 +131,7 @@ def render_html(
 <h1 style="margin:0 0 12px;font-family:Helvetica,Arial,sans-serif;font-size:21px;line-height:1.3;color:{TEXT};">{escape(title)}</h1>
 <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:{TEXT};">{escape(intro)}</p>
 {_detail_rows(rows)}
+{_sections(sections or [])}
 {button_html}
 {note_html}
 </td></tr>
@@ -125,12 +148,16 @@ def render_text(
     title: str,
     intro: str,
     rows: list[tuple[str, str]],
+    sections: list[tuple[str, str]] | None = None,
     buttons: list[tuple[str, str]] | None = None,
     note: str = "",
     footer: str = "",
 ) -> str:
     lines = [title, "", intro, ""]
     lines += [f"{label}: {value}" for label, value in rows if value]
+    for heading, body in sections or []:
+        if body.strip():
+            lines += ["", heading.upper(), body.strip()]
     if buttons:
         lines += ["", "Agregar a tu calendario:"]
         lines += [f"- {label}: {url}" for label, url in buttons]

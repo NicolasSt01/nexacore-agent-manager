@@ -11,9 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...models import Agent, AgentTool, Conversation
-from ..ai import Completion, chat_completion
+from ..ai import CHAT_COMPLETIONS_PROVIDERS, Completion, chat_completion
 from .builtin import ToolContext, builtin_specs
-from .loop import anthropic_tool_loop, openai_tool_loop
+from .loop import ResponsesUnsupported, anthropic_tool_loop, openai_chat_tool_loop, openai_tool_loop
 from .specs import build_tool_specs
 
 # Injected whenever the agent has tools: a failing tool must never be papered
@@ -55,10 +55,18 @@ async def run_completion(
         return await chat_completion(agent.provider, base_url, api_key, model, messages, temperature=temperature, max_tokens=max_tokens)
     messages = _with_tool_rules(messages)
     context = ToolContext(db=db, agent=agent, conversation=conversation)
+    args = (base_url, api_key, model, messages, specs, temperature, max_tokens, context)
     try:
         if agent.provider == "anthropic":
-            return await anthropic_tool_loop(base_url, api_key, model, messages, specs, temperature, max_tokens, context)
-        return await openai_tool_loop(base_url, api_key, model, messages, specs, temperature, max_tokens, context)
+            return await anthropic_tool_loop(*args)
+        if agent.provider in CHAT_COMPLETIONS_PROVIDERS:
+            return await openai_chat_tool_loop(*args)
+        try:
+            return await openai_tool_loop(*args)
+        except ResponsesUnsupported:
+            # A custom base_url that only implements /chat/completions. Safe to
+            # retry: the exception is raised before any tool has run.
+            return await openai_chat_tool_loop(*args)
     except HTTPException:
         raise
     except (httpx.HTTPError, KeyError, ValueError, IndexError) as exc:
