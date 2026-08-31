@@ -2,8 +2,9 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { Bot, Building2, Inbox, LoaderCircle, LogOut, MessageSquareText, Send, ShieldCheck, UserRound } from "lucide-react";
+import { Bot, Building2, Inbox, LoaderCircle, LogOut, Mail, MessageSquareText, Send, ShieldCheck, UserRound } from "lucide-react";
 import { Alert, EmptyState } from "@/components/ui";
+import { EmailSettings, type EmailLabels } from "@/components/email-settings";
 import { api, ApiError, messageFrom } from "@/lib/api";
 import { formatWhen, isNearBottom, isSameOpenThread } from "@/lib/datetime";
 import { useLanguage, useT } from "@/lib/i18n";
@@ -85,6 +86,7 @@ function PortalInbox({ slug, portal, logout }: { slug: string; portal: PortalPub
   const t = useT();
   const { lang } = useLanguage();
   const [items, setItems] = useState<Conversation[]>([]);
+  const [view, setView] = useState<"inbox" | "email">("inbox");
   const [usage, setUsage] = useState<PortalUsage | null>(null);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [busy, setBusy] = useState(false);
@@ -131,5 +133,37 @@ function PortalInbox({ slug, portal, logout }: { slug: string; portal: PortalPub
   }
   async function setMode(mode: "ai" | "human") { if (!selected) return; setSelected(await api<Conversation>(`/portal/${slug}/conversations/${selected.id}/mode`, { method: "PATCH", body: JSON.stringify({ mode }) })); await refresh(); }
   async function reply(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!selected) return; const form = event.currentTarget; const data = new FormData(form); setBusy(true); setError(""); try { setSelected(await api<Conversation>(`/portal/${slug}/conversations/${selected.id}/reply`, { method: "POST", body: JSON.stringify({ content: data.get("content") }) })); form.reset(); await refresh(); } catch (err) { setError(messageFrom(err)); } finally { setBusy(false); } }
-  return <main className="portal-app" style={{ "--portal-color": portal.agency_brand_color } as React.CSSProperties}><aside className="portal-nav"><div className="portal-brand">{portal.agency_logo_url ? <img src={`${portal.agency_logo_url}`} alt="Logo" /> : <span>{portal.agency_name.slice(0, 1)}</span>}<strong>{portal.client_name}</strong></div><nav><a className="active"><Inbox size={18} /> {t("portal.inbox.nav.inbox")}</a><a className="disabled"><Bot size={18} /> {t("portal.inbox.nav.agents")}</a></nav><button onClick={logout}><LogOut size={17} /> {t("portal.inbox.nav.logout")}</button></aside><section className="portal-main"><header><div><small>{t("portal.inbox.header.eyebrow")}</small><h1>{portal.portal_title}</h1></div><span>{t("portal.inbox.header.conversationsCount", { count: items.length })}</span></header>{usage && <PortalUsagePanel usage={usage} />}{items.length ? <div className="portal-inbox"><aside>{items.map((item) => <button key={item.id} onClick={() => choose(item)} className={selected?.id === item.id ? "active" : ""}><span className="entity-avatar tiny"><UserRound size={15} /></span><span><span className="portal-inbox-row-top"><strong>{item.title}</strong><time>{formatWhen(item.updated_at, lang)}</time></span><small className="portal-inbox-preview">{item.preview || t("portal.inbox.list.noMessages")}</small><small>{item.mode === "human" ? t("portal.inbox.list.humanSupport") : t("portal.inbox.list.aiAgent")}</small></span></button>)}</aside><section>{selected && <><header><div><strong>{selected.title}</strong><small>{t("portal.inbox.conversation.channel", { channel: selected.channel })}</small></div><button className={`mode-toggle ${selected.mode}`} onClick={() => setMode(selected.mode === "ai" ? "human" : "ai")}>{selected.mode === "ai" ? t("portal.inbox.conversation.takeControl") : t("portal.inbox.conversation.returnToAi")}</button></header><div className="portal-messages" ref={messagesRef}>{selected.messages?.map((message) => <article key={message.id} className={message.role}><small>{message.sender_name || (message.role === "assistant" ? t("portal.inbox.conversation.agent") : t("portal.inbox.conversation.visitor"))} · {formatWhen(message.created_at, lang)}</small><p>{message.content}</p></article>)}</div>{error && <Alert>{error}</Alert>}<form onSubmit={reply} className="portal-composer"><input name="content" required disabled={selected.mode !== "human" || busy} placeholder={selected.mode === "human" ? t("portal.inbox.conversation.replyPlaceholder") : t("portal.inbox.conversation.takeControlToReply")} /><button disabled={selected.mode !== "human" || busy}>{busy ? <LoaderCircle className="spin" size={18} /> : <Send size={18} />}</button></form></>}</section></div> : <EmptyState icon={<Inbox />} title={t("portal.inbox.empty.title")} description={t("portal.inbox.empty.description")} />}</section></main>;
+  return <main className="portal-app" style={{ "--portal-color": portal.agency_brand_color } as React.CSSProperties}><aside className="portal-nav"><div className="portal-brand">{portal.agency_logo_url ? <img src={`${portal.agency_logo_url}`} alt="Logo" /> : <span>{portal.agency_name.slice(0, 1)}</span>}<strong>{portal.client_name}</strong></div><nav><a className={view === "inbox" ? "active" : ""} onClick={() => setView("inbox")}><Inbox size={18} /> {t("portal.inbox.nav.inbox")}</a><a className={view === "email" ? "active" : ""} onClick={() => setView("email")}><Mail size={18} /> {t("portal.inbox.nav.email")}</a><a className="disabled"><Bot size={18} /> {t("portal.inbox.nav.agents")}</a></nav><button onClick={logout}><LogOut size={17} /> {t("portal.inbox.nav.logout")}</button></aside><section className="portal-main"><header><div><small>{t("portal.inbox.header.eyebrow")}</small><h1>{portal.portal_title}</h1></div><span>{t("portal.inbox.header.conversationsCount", { count: items.length })}</span></header>{view === "email" ? <EmailSettings basePath={`/portal/${slug}`} labels={portalEmailLabels(t)} /> : <>{usage && <PortalUsagePanel usage={usage} />}{items.length ? <div className="portal-inbox"><aside>{items.map((item) => <button key={item.id} onClick={() => choose(item)} className={selected?.id === item.id ? "active" : ""}><span className="entity-avatar tiny"><UserRound size={15} /></span><span><span className="portal-inbox-row-top"><strong>{item.title}</strong><time>{formatWhen(item.updated_at, lang)}</time></span><small className="portal-inbox-preview">{item.preview || t("portal.inbox.list.noMessages")}</small><small>{item.mode === "human" ? t("portal.inbox.list.humanSupport") : t("portal.inbox.list.aiAgent")}</small></span></button>)}</aside><section>{selected && <><header><div><strong>{selected.title}</strong><small>{t("portal.inbox.conversation.channel", { channel: selected.channel })}</small></div><button className={`mode-toggle ${selected.mode}`} onClick={() => setMode(selected.mode === "ai" ? "human" : "ai")}>{selected.mode === "ai" ? t("portal.inbox.conversation.takeControl") : t("portal.inbox.conversation.returnToAi")}</button></header><div className="portal-messages" ref={messagesRef}>{selected.messages?.map((message) => <article key={message.id} className={message.role}><small>{message.sender_name || (message.role === "assistant" ? t("portal.inbox.conversation.agent") : t("portal.inbox.conversation.visitor"))} · {formatWhen(message.created_at, lang)}</small><p>{message.content}</p></article>)}</div>{error && <Alert>{error}</Alert>}<form onSubmit={reply} className="portal-composer"><input name="content" required disabled={selected.mode !== "human" || busy} placeholder={selected.mode === "human" ? t("portal.inbox.conversation.replyPlaceholder") : t("portal.inbox.conversation.takeControlToReply")} /><button disabled={selected.mode !== "human" || busy}>{busy ? <LoaderCircle className="spin" size={18} /> : <Send size={18} />}</button></form></>}</section></div> : <EmptyState icon={<Inbox />} title={t("portal.inbox.empty.title")} description={t("portal.inbox.empty.description")} />}</>}</section></main>;
+}
+
+/** The client-facing wording for the shared email form. */
+function portalEmailLabels(t: ReturnType<typeof useT>): EmailLabels {
+  return {
+    heading: t("portal.email.heading"),
+    copy: t("portal.email.copy"),
+    notificationLabel: t("portal.email.notificationLabel"),
+    notificationHint: t("portal.email.notificationHint"),
+    senderHeading: t("portal.email.senderHeading"),
+    senderCopy: t("portal.email.senderCopy"),
+    useOwn: t("portal.email.useOwn"),
+    useOwnHint: t("portal.email.useOwnHint"),
+    host: t("portal.email.host"),
+    port: t("portal.email.port"),
+    user: t("portal.email.user"),
+    password: t("portal.email.password"),
+    passwordSaved: t("portal.email.passwordSaved"),
+    useTls: t("portal.email.useTls"),
+    fromEmail: t("portal.email.fromEmail"),
+    fromName: t("portal.email.fromName"),
+    statusOwn: t("portal.email.statusOwn"),
+    statusFallback: t("portal.email.statusFallback"),
+    statusPending: t("portal.email.statusPending"),
+    statusNone: t("portal.email.statusNone"),
+    testHeading: t("portal.email.testHeading"),
+    testLabel: t("portal.email.testLabel"),
+    testSubmit: t("portal.email.testSubmit"),
+    testSent: t("portal.email.testSent"),
+    saved: t("portal.email.saved"),
+    save: t("portal.email.save"),
+  };
 }

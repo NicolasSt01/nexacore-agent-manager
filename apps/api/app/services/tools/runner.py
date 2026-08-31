@@ -10,8 +10,9 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ...models import Agent, AgentTool
+from ...models import Agent, AgentTool, Conversation
 from ..ai import Completion, chat_completion
+from .builtin import ToolContext, builtin_specs
 from .loop import anthropic_tool_loop, openai_tool_loop
 from .specs import build_tool_specs
 
@@ -43,19 +44,21 @@ async def run_completion(
     temperature: float | None = None,
     max_tokens: int | None = None,
     model_override: str | None = None,
+    conversation: Conversation | None = None,
 ) -> Completion:
     # The circuit breaker swaps the model under subscription pressure, so the
     # agent's configured model is a default, not a given.
     model = (model_override or agent.model).strip()
     rows = db.scalars(select(AgentTool).where(AgentTool.agent_id == agent.id, AgentTool.enabled.is_(True))).all()
-    specs = build_tool_specs(list(rows))
+    specs = [*builtin_specs(agent), *build_tool_specs(list(rows))]
     if not specs:
         return await chat_completion(agent.provider, base_url, api_key, model, messages, temperature=temperature, max_tokens=max_tokens)
     messages = _with_tool_rules(messages)
+    context = ToolContext(db=db, agent=agent, conversation=conversation)
     try:
         if agent.provider == "anthropic":
-            return await anthropic_tool_loop(base_url, api_key, model, messages, specs, temperature, max_tokens)
-        return await openai_tool_loop(base_url, api_key, model, messages, specs, temperature, max_tokens)
+            return await anthropic_tool_loop(base_url, api_key, model, messages, specs, temperature, max_tokens, context)
+        return await openai_tool_loop(base_url, api_key, model, messages, specs, temperature, max_tokens, context)
     except HTTPException:
         raise
     except (httpx.HTTPError, KeyError, ValueError, IndexError) as exc:

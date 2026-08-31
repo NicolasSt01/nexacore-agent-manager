@@ -69,3 +69,6 @@ widget_rate_limit = RateLimiter(30, 60, name="widget")
 # The Meta webhook is authenticated by its HMAC signature; this generous limit
 # only guards against floods of unsigned traffic.
 whatsapp_cloud_webhook_rate_limit = RateLimiter(300, 60, name="whatsapp-cloud-webhook")
+# The public .ics endpoint: cheap to serve, but the token is the only guard, so
+# a limit keeps enumeration attempts from being free.
+calendar_rate_limit = RateLimiter(60, 60, name="calendar")

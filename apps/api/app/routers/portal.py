@@ -10,6 +10,9 @@ from ..models import Agency, Agent, Client, Conversation, Message, now_utc
 from ..ratelimit import login_rate_limit
 from ..schemas import (
     AgentSummary,
+    ClientEmailOut,
+    ClientEmailUpdate,
+    ClientTestEmailRequest,
     ConversationDetail,
     ConversationModeUpdate,
     ConversationOut,
@@ -20,6 +23,7 @@ from ..schemas import (
     SendMessageRequest,
 )
 from ..security import create_portal_token, decode_portal_token, verify_password
+from ..services import client_email
 from ..services.billing import get_quota_status
 from ..services.whatsapp import send_channel_message
 
@@ -179,6 +183,52 @@ def portal_usage(slug: str, client: Client = Depends(_portal_client), db: Sessio
 def portal_me(slug: str, client: Client = Depends(_portal_client), db: Session = Depends(get_db)):
     agency = db.get(Agency, client.agency_id)
     return {"client_id": client.id, "client_name": client.name, "portal_slug": client.portal_slug, "agency_name": agency.name}
+
+
+@router.get("/{slug}/email", response_model=ClientEmailOut)
+def portal_email_settings(slug: str, client: Client = Depends(_portal_client), db: Session = Depends(get_db)):
+    return client_email.settings_out(db, client)
+
+
+@router.patch("/{slug}/email", response_model=ClientEmailOut)
+def portal_update_email(
+    slug: str,
+    payload: ClientEmailUpdate,
+    client: Client = Depends(_portal_client),
+    db: Session = Depends(get_db),
+):
+    """The client configures their own sending address, or leaves it to us.
+
+    Same fields the agency panel edits: notifications must not depend on who
+    happened to fill the form in.
+    """
+    client_email.apply_settings(client, payload.model_dump(exclude_unset=True))
+    if client.smtp_enabled and (not client.smtp_host or not client.smtp_from_email):
+        raise HTTPException(
+            status_code=400, detail="Indica el servidor SMTP y la dirección de envío antes de activarlo"
+        )
+    db.commit()
+    return client_email.settings_out(db, client)
+
+
+@router.post("/{slug}/email/test", response_model=ClientEmailOut)
+def portal_test_email(
+    slug: str,
+    payload: ClientTestEmailRequest,
+    client: Client = Depends(_portal_client),
+    db: Session = Depends(get_db),
+):
+    sent, source = client_email.send_test(db, client, str(payload.to))
+    if not sent:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No se pudo enviar con tus datos SMTP. Revísalos e inténtalo de nuevo."
+                if source == "own"
+                else "No se pudo enviar el correo de prueba. Contacta a tu proveedor."
+            ),
+        )
+    return client_email.settings_out(db, client)
 
 
 @router.get("/{slug}/agents", response_model=list[AgentSummary])

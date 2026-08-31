@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { BadgeCheck, FlaskConical, Globe, Inbox as InboxIcon, LoaderCircle, MessageCircle, Search, UserRound } from "lucide-react";
+import { BadgeCheck, Facebook, FlaskConical, Globe, Inbox as InboxIcon, Instagram, LoaderCircle, MessageCircle, Search, UserRound } from "lucide-react";
 import { PageHead } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { api, messageFrom } from "@/lib/api";
@@ -38,6 +38,8 @@ export default function InboxPage() {
     if (value === "whatsapp") return t("inbox.channelWhatsapp");
     if (value === "whatsapp_cloud") return t("inbox.channelWhatsappCloud");
     if (value === "widget") return t("inbox.channelWidget");
+    if (value === "messenger") return t("inbox.channelMessenger");
+    if (value === "instagram") return t("inbox.channelInstagram");
     return value;
   };
 
@@ -45,6 +47,8 @@ export default function InboxPage() {
     if (value === "whatsapp") return <MessageCircle size={10} />;
     if (value === "whatsapp_cloud") return <BadgeCheck size={10} />;
     if (value === "widget") return <Globe size={10} />;
+    if (value === "messenger") return <Facebook size={10} />;
+    if (value === "instagram") return <Instagram size={10} />;
     if (value === "playground") return <FlaskConical size={10} />;
     return <MessageCircle size={10} />;
   };
@@ -166,7 +170,7 @@ export default function InboxPage() {
 
     <div className="toolbar filters">
       <div className="filter-select"><span>{t("inbox.filterAgent")}</span><select value={agentId} onChange={(e) => setAgentId(e.target.value)}><option value="">{t("inbox.allAgents")}</option>{agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-      <div className="filter-select"><span>{t("inbox.filterChannel")}</span><select value={channel} onChange={(e) => setChannel(e.target.value)}><option value="">{t("inbox.allChannels")}</option><option value="playground">{t("inbox.channelPlayground")}</option><option value="whatsapp">{t("inbox.channelWhatsapp")}</option><option value="whatsapp_cloud">{t("inbox.channelWhatsappCloud")}</option><option value="widget">{t("inbox.channelWidget")}</option></select></div>
+      <div className="filter-select"><span>{t("inbox.filterChannel")}</span><select value={channel} onChange={(e) => setChannel(e.target.value)}><option value="">{t("inbox.allChannels")}</option><option value="playground">{t("inbox.channelPlayground")}</option><option value="whatsapp">{t("inbox.channelWhatsapp")}</option><option value="whatsapp_cloud">{t("inbox.channelWhatsappCloud")}</option><option value="widget">{t("inbox.channelWidget")}</option><option value="messenger">{t("inbox.channelMessenger")}</option><option value="instagram">{t("inbox.channelInstagram")}</option></select></div>
     </div>
 
     <div className="inbox-layout">

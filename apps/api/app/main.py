@@ -10,6 +10,7 @@ from .routers import (
     agency,
     agent_tools,
     agents,
+    appointments,
     auth,
     catalog,
     clients,
@@ -85,3 +86,4 @@ app.include_router(meta_channels.router, prefix="/api")
 app.include_router(meta_webhook.public_router, prefix="/api")
 app.include_router(widget.router, prefix="/api")
 app.include_router(domains.public_router, prefix="/api")
+app.include_router(appointments.public_router, prefix="/api")

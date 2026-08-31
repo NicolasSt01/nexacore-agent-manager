@@ -209,7 +209,8 @@ async def _generate_reply(
         contact_summary=usable_summary(conversation),
     )
     completion = await run_completion(
-        db, agent, base_url, api_key, messages, temperature=agent.temperature, max_tokens=agent.max_tokens
+        db, agent, base_url, api_key, messages, temperature=agent.temperature, max_tokens=agent.max_tokens,
+        conversation=conversation,
     )
     db.add(
         Message(

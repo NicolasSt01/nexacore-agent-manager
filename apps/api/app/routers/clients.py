@@ -11,13 +11,17 @@ from ..schemas import (
     ClientCreate,
     ClientDomainOut,
     ClientDomainSet,
+    ClientEmailOut,
+    ClientEmailUpdate,
     ClientOut,
     ClientOwnerUpdate,
     ClientPortalUpdate,
+    ClientTestEmailRequest,
     ClientUpdate,
 )
 from ..security import hash_password
 from ..services import billing as billing_service
+from ..services import client_email
 from ..services.scoping import not_found, scope_clients
 from ..services import dns as dns_service
 from ..slugs import slugify, unique_slug
@@ -145,6 +149,51 @@ def update_client_portal(
         raise HTTPException(status_code=400, detail="Set an email and a password before enabling the portal")
     db.commit()
     return _enrich_client_out(db, _client(db, user, client_id))
+
+
+@router.get("/{client_id}/email", response_model=ClientEmailOut)
+def get_client_email(client_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return client_email.settings_out(db, _client(db, user, client_id))
+
+
+@router.patch("/{client_id}/email", response_model=ClientEmailOut)
+def update_client_email(
+    client_id: uuid.UUID,
+    payload: ClientEmailUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Set where this client is notified, and optionally their own SMTP server."""
+    client = _client(db, user, client_id)
+    client_email.apply_settings(client, payload.model_dump(exclude_unset=True))
+    if client.smtp_enabled and (not client.smtp_host or not client.smtp_from_email):
+        raise HTTPException(
+            status_code=400, detail="Set the SMTP host and the sender address before enabling the client's own server"
+        )
+    db.commit()
+    return client_email.settings_out(db, client)
+
+
+@router.post("/{client_id}/email/test", response_model=ClientEmailOut)
+def test_client_email(
+    client_id: uuid.UUID,
+    payload: ClientTestEmailRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Send a test message. A success on the client's own server marks it verified."""
+    client = _client(db, user, client_id)
+    sent, source = client_email.send_test(db, client, str(payload.to))
+    if not sent:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "The email could not be sent with the client's own SMTP settings. Check them and try again."
+                if source == "own"
+                else "The email could not be sent. Check that the agency's email settings are enabled and correct."
+            ),
+        )
+    return client_email.settings_out(db, client)
 
 
 @router.get("/{client_id}/domain", response_model=ClientDomainOut)

@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, AudioLines, Bot, CheckCircle2, Code, Copy, ExternalLink, FileText, ImageIcon, LoaderCircle, MessageSquareText, Plus, Power, PowerOff, Save, Settings2, Sparkles, Trash2, UploadCloud, Wrench, XCircle } from "lucide-react";
+import { ArrowLeft, AudioLines, Bot, CalendarClock, CheckCircle2, Code, Copy, ExternalLink, FileText, ImageIcon, LoaderCircle, MessageSquareText, Plus, Power, PowerOff, Save, Settings2, Sparkles, Trash2, UploadCloud, Wrench, XCircle } from "lucide-react";
 import { api, messageFrom } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { Alert } from "@/components/ui";
@@ -35,6 +35,12 @@ export default function AgentDetailPage() {
   const [imageModel, setImageModel] = useState("gpt-4.1");
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [audioModel, setAudioModel] = useState("whisper-1");
+  const [schedulingEnabled, setSchedulingEnabled] = useState(false);
+  const [schedulingOwnerEmail, setSchedulingOwnerEmail] = useState("");
+  const [schedulingLocation, setSchedulingLocation] = useState("");
+  const [schedulingDuration, setSchedulingDuration] = useState(60);
+  const [schedulingHours, setSchedulingHours] = useState("");
+  const [schedulingRequireEmail, setSchedulingRequireEmail] = useState(true);
   const [widgetEnabled, setWidgetEnabled] = useState(false);
   const [widgetGreeting, setWidgetGreeting] = useState("");
   const [widgetColor, setWidgetColor] = useState("#075985");
@@ -53,6 +59,9 @@ export default function AgentDetailPage() {
     setTemperature(a.temperature); setMaxTokens(a.max_tokens); setMemoryLimit(a.memory_limit);
     setImageEnabled(a.image_enabled); setImageModel(a.image_model || "gpt-4.1");
     setAudioEnabled(a.audio_enabled); setAudioModel(a.audio_model || "whisper-1");
+    setSchedulingEnabled(a.scheduling_enabled); setSchedulingOwnerEmail(a.scheduling_owner_email);
+    setSchedulingLocation(a.scheduling_location); setSchedulingDuration(a.scheduling_duration_minutes || 60);
+    setSchedulingHours(a.scheduling_hours); setSchedulingRequireEmail(a.scheduling_require_email);
     setWidgetEnabled(a.widget_enabled); setWidgetGreeting(a.widget_greeting);
     setWidgetColor(a.widget_color || "#075985"); setWidgetPosition(a.widget_position || "right");
   };
@@ -81,7 +90,7 @@ export default function AgentDetailPage() {
   async function saveConfig(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true);
     const form = new FormData(event.currentTarget);
-    const payload = { client_id: form.get("client_id"), name: form.get("name"), description: form.get("description"), instructions: form.get("instructions"), personality: form.get("personality"), brief_summary: form.get("brief_summary"), brief_products: form.get("brief_products"), brief_audience: form.get("brief_audience"), brief_policies: form.get("brief_policies"), brief_goal: form.get("brief_goal"), brief_dos: form.get("brief_dos"), brief_donts: form.get("brief_donts"), provider, model, timezone, temperature, max_tokens: maxTokens, memory_limit: memoryLimit, reply_delay_seconds: replyDelaySeconds, session_gap_hours: sessionGapHours, history_max_age_days: historyMaxAgeDays, image_enabled: imageEnabled, image_model: imageModel, audio_enabled: audioEnabled, audio_model: audioModel, is_template: isTemplate, template_label: templateLabel };
+    const payload = { client_id: form.get("client_id"), name: form.get("name"), description: form.get("description"), instructions: form.get("instructions"), personality: form.get("personality"), brief_summary: form.get("brief_summary"), brief_products: form.get("brief_products"), brief_audience: form.get("brief_audience"), brief_policies: form.get("brief_policies"), brief_goal: form.get("brief_goal"), brief_dos: form.get("brief_dos"), brief_donts: form.get("brief_donts"), provider, model, timezone, temperature, max_tokens: maxTokens, memory_limit: memoryLimit, reply_delay_seconds: replyDelaySeconds, session_gap_hours: sessionGapHours, history_max_age_days: historyMaxAgeDays, image_enabled: imageEnabled, image_model: imageModel, audio_enabled: audioEnabled, audio_model: audioModel, scheduling_enabled: schedulingEnabled, scheduling_owner_email: schedulingOwnerEmail, scheduling_location: schedulingLocation, scheduling_duration_minutes: schedulingDuration, scheduling_hours: schedulingHours, scheduling_require_email: schedulingRequireEmail, is_template: isTemplate, template_label: templateLabel };
     try { setAgent(await api<Agent>(`/agents/${id}`, { method: "PATCH", body: JSON.stringify(payload) })); toast.success(t("agents.detail.configSaved")); }
     catch (err) { toast.error(messageFrom(err)); } finally { setBusy(false); }
   }
@@ -184,6 +193,21 @@ export default function AgentDetailPage() {
           {audioEnabled && <label className="capability-model">{t("agents.detail.modelLabel")}<Combobox value={audioModel} onChange={setAudioModel} options={AUDIO_MODELS} placeholder="whisper-1" allowCustom /></label>}
         </div>
         <Alert type="info">{t("agents.detail.capabilitiesOpenAI")}</Alert>
+      </div></section>
+      <section className="settings-section"><div className="settings-copy"><h3>{t("agents.detail.schedulingHeading")}</h3><p>{t("agents.detail.schedulingCopy")}</p></div><div className="settings-fields">
+        <div className="capability">
+          <label className="capability-head"><input type="checkbox" checked={schedulingEnabled} onChange={(e) => setSchedulingEnabled(e.target.checked)} /><CalendarClock size={17} /><span><strong>{t("agents.detail.schedulingEnable")}</strong><small>{t("agents.detail.schedulingEnableHint")}</small></span></label>
+        </div>
+        {schedulingEnabled && <>
+          <div className="form-grid">
+            <label>{t("agents.detail.schedulingOwnerEmail")}<input type="email" value={schedulingOwnerEmail} onChange={(e) => setSchedulingOwnerEmail(e.target.value)} placeholder={agent.client.portal_email || ""} /><small>{t("agents.detail.schedulingOwnerEmailHint")}</small></label>
+            <label>{t("agents.detail.schedulingDuration")}<input type="number" min={5} max={720} value={schedulingDuration} onChange={(e) => setSchedulingDuration(Number(e.target.value))} /></label>
+          </div>
+          <label>{t("agents.detail.schedulingLocation")}<input value={schedulingLocation} onChange={(e) => setSchedulingLocation(e.target.value)} placeholder={t("agents.detail.schedulingLocationPlaceholder")} /></label>
+          <label>{t("agents.detail.schedulingHours")}<textarea rows={3} value={schedulingHours} onChange={(e) => setSchedulingHours(e.target.value)} placeholder={t("agents.detail.schedulingHoursPlaceholder")} /><small>{t("agents.detail.schedulingHoursHint")}</small></label>
+          <label className="switch-row"><span><strong>{t("agents.detail.schedulingRequireEmail")}</strong><small>{t("agents.detail.schedulingRequireEmailHint")}</small></span><input type="checkbox" checked={schedulingRequireEmail} onChange={(e) => setSchedulingRequireEmail(e.target.checked)} /></label>
+          <Alert type="info">{t("agents.detail.schedulingEmailWarning")} <Link href={`/clients/${agent.client_id}`}>{t("clients.detail.tabEmail")}</Link></Alert>
+        </>}
       </div></section>
       <section className="form-section"><div className="section-copy"><h2>{t("finance.templates.markTemplate")}</h2><p>{t("finance.templates.markTemplateHint")}</p></div><div className="form-fields"><label className="switch-row"><span><strong>{t("finance.templates.markTemplate")}</strong><small>{t("finance.templates.markTemplateHint")}</small></span><input type="checkbox" checked={isTemplate} onChange={(e) => setIsTemplate(e.target.checked)} /></label>{isTemplate && <label>{t("finance.templates.templateLabel")}<input value={templateLabel} onChange={(e) => setTemplateLabel(e.target.value)} placeholder={agent.name} /><small>{t("finance.templates.templateLabelHint")}</small></label>}</div></section><div className="sticky-save"><span>{t("agents.detail.stickyNote")}</span><button className="button primary" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />} {t("agents.detail.saveConfig")}</button></div>
     </form>}

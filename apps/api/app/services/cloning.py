@@ -39,6 +39,10 @@ CONFIG_FIELDS = (
     "widget_greeting",
     "widget_color",
     "widget_position",
+    "scheduling_enabled",
+    "scheduling_duration_minutes",
+    "scheduling_hours",
+    "scheduling_require_email",
 )
 
 # Deliberately NOT copied:
@@ -48,6 +52,9 @@ CONFIG_FIELDS = (
 # - is_template / template_label: a clone is a working agent, not a template,
 #   until someone explicitly shares it.
 # - widget_enabled: the new client has not embedded anything yet.
+# - scheduling_owner_email and scheduling_location: the address and the
+#   inbox of the business the agent was built for. Copying them would send
+#   the new client's appointments to the previous one.
 # - conversations and channels: they belong to the source client.
 
 

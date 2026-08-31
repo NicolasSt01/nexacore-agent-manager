@@ -138,7 +138,7 @@ export default function MetaChannelPage() {
       <section className="wa-panel">
         <div className="wa-panel-head"><span><Bot size={19} /></span><div><h2>{t("clients.whatsapp.assignedAgent")}</h2><p>{t("clients.whatsapp.assignedAgentCopy")}</p></div></div>
         <div className="wa-agent-row"><label>{t("clients.whatsapp.agentToRespond")}<select value={agentId} onChange={(event) => setAgentId(event.target.value)} disabled={busy}><option value="">{t("clients.whatsapp.selectAgent")}</option>{client.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}{agent.is_active ? "" : t("clients.whatsapp.inactiveSuffix")}</option>)}</select></label></div>
-        {!client.agents.length && <Alert>{t("clients.whatsapp.needsAgent")}</Alert>}
+        {!client.agents.length && <Alert>{t("channels.meta.needsAgent")}</Alert>}
       </section>
 
       <section className="wa-panel">

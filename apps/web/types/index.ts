@@ -42,6 +42,25 @@ export type Client = {
   updated_at: string;
 };
 
+/** One client's email configuration. The password is never returned. */
+export type ClientEmailSettings = {
+  notification_email: string | null;
+  smtp_enabled: boolean;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_user: string;
+  has_smtp_password: boolean;
+  smtp_use_tls: boolean;
+  smtp_from_email: string;
+  smtp_from_name: string;
+  smtp_verified_at: string | null;
+  // True when mail leaves from this client's own server rather than the agency's.
+  using_own_smtp: boolean;
+  // Whether anything can be delivered at all right now, either way.
+  delivery_ready: boolean;
+  alert_email: string | null;
+};
+
 export type ClientDomain = {
   domain: string | null;
   verified: boolean;
@@ -82,6 +101,13 @@ export type Agent = {
   widget_greeting: string;
   widget_color: string;
   widget_position: string;
+  // Appointment booking: the agent books the slot and emails both sides.
+  scheduling_enabled: boolean;
+  scheduling_owner_email: string;
+  scheduling_location: string;
+  scheduling_duration_minutes: number;
+  scheduling_hours: string;
+  scheduling_require_email: boolean;
   is_active: boolean;
   // Shared as a reusable template for the whole agency.
   is_template: boolean;

@@ -186,6 +186,33 @@ def _business_brief(agent: Agent) -> str:
     return "\n".join(lines)
 
 
+def _scheduling_block(agent: Agent) -> str:
+    """Booking rules for the agent, when the schedule_appointment tool is on.
+
+    Without them the model tends to *say* an appointment is booked without
+    calling anything, which leaves the business with no record and nobody
+    notified. The rules make the tool call the only way to confirm.
+    """
+    if not agent.scheduling_enabled:
+        return ""
+    needed = "el nombre completo de la persona, la fecha y la hora exactas"
+    if agent.scheduling_require_email:
+        needed += " y su correo electrónico"
+    lines = [
+        "Puedes agendar citas, reuniones y consultas con la herramienta schedule_appointment.",
+        f"Antes de llamarla debes tener {needed}. Pide lo que falte, uno o dos datos por mensaje.",
+        "Nunca confirmes una cita sin haber llamado a la herramienta: es lo único que la registra "
+        "y lo que envía los correos de confirmación con el botón para agregarla al calendario.",
+        "Si la herramienta responde que el horario está ocupado, ofrece otra hora y vuelve a intentarlo.",
+        f"Duración por defecto: {agent.scheduling_duration_minutes} minutos.",
+    ]
+    if agent.scheduling_hours.strip():
+        lines.append(f"Horario en el que se pueden agendar citas: {agent.scheduling_hours.strip()}")
+    if agent.scheduling_location.strip():
+        lines.append(f"Lugar de la cita: {agent.scheduling_location.strip()}")
+    return "AGENDAMIENTO DE CITAS:\n" + "\n".join(f"- {line}" for line in lines)
+
+
 def build_system_prompt(agent: Agent, knowledge_text: str) -> str:
     client = agent.client
     tz_name = (agent.timezone or "UTC").strip() or "UTC"
@@ -203,6 +230,9 @@ def build_system_prompt(agent: Agent, knowledge_text: str) -> str:
     brief = _business_brief(agent)
     if brief:
         parts.append(f"BRIEF DEL NEGOCIO:\n{brief}")
+    scheduling = _scheduling_block(agent)
+    if scheduling:
+        parts.append(scheduling)
     if client.general_context.strip():
         parts.append(f"CONTEXTO GENERAL DEL CLIENTE:\n{client.general_context}")
     if agent.manual_context.strip():

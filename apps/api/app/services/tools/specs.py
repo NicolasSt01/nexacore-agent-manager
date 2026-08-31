@@ -20,8 +20,10 @@ class ToolSpec:
     name: str            # name exposed to the LLM (prefixed for MCP tools)
     description: str
     input_schema: dict
-    tool: AgentTool      # backing row
+    # Backing row, or None for a platform built-in (see tools/builtin.py).
+    tool: AgentTool | None = None
     mcp_tool_name: str | None = None  # unprefixed name on the MCP server
+    builtin: str | None = None        # built-in handler key, when there is no row
 
 
 def path_placeholders(url: str) -> list[str]:

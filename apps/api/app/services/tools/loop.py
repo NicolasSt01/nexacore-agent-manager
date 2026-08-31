@@ -9,6 +9,7 @@ them through the plain-completion text extractors until the loop ends.
 import json
 
 from ..ai import ANTHROPIC_VERSION, Completion, _post_json, extract_openai_text
+from .builtin import ToolContext, execute_builtin
 from .http_exec import execute_http_tool
 from .mcp_client import call_mcp_tool
 from .specs import ToolSpec, find_spec
@@ -17,8 +18,10 @@ MAX_TOOL_ITERATIONS = 5
 RESULT_PREVIEW_CHARS = 500
 
 
-async def _execute(spec: ToolSpec, args: dict) -> tuple[str, bool]:
-    if spec.mcp_tool_name is not None:
+async def _execute(spec: ToolSpec, args: dict, context: ToolContext | None) -> tuple[str, bool]:
+    if spec.builtin is not None:
+        result, is_error = await execute_builtin(spec, args, context)
+    elif spec.mcp_tool_name is not None:
         result, is_error = await call_mcp_tool(spec.tool, spec.mcp_tool_name, args)
     else:
         result, is_error = await execute_http_tool(spec.tool, args)
@@ -36,7 +39,7 @@ def _record(metadata: list[dict], name: str, args: dict, result: str, is_error: 
 
 async def anthropic_tool_loop(
     base_url: str, api_key: str, model: str, messages: list[dict], specs: list[ToolSpec],
-    temperature: float | None, max_tokens: int | None,
+    temperature: float | None, max_tokens: int | None, context: ToolContext | None = None,
 ) -> Completion:
     url = f"{base_url.rstrip('/')}/messages"
     headers = {"x-api-key": api_key, "anthropic-version": ANTHROPIC_VERSION, "Content-Type": "application/json"}
@@ -74,7 +77,7 @@ async def anthropic_tool_loop(
             if spec is None:
                 result, is_error = f"Error: unknown tool '{block.get('name')}'", True
             else:
-                result, is_error = await _execute(spec, args)
+                result, is_error = await _execute(spec, args, context)
             _record(metadata, block.get("name", ""), args, result, is_error)
             results.append({"type": "tool_result", "tool_use_id": block.get("id"), "content": result, "is_error": is_error})
         convo.append({"role": "user", "content": results})
@@ -83,7 +86,7 @@ async def anthropic_tool_loop(
 
 async def openai_tool_loop(
     base_url: str, api_key: str, model: str, messages: list[dict], specs: list[ToolSpec],
-    temperature: float | None, max_tokens: int | None,
+    temperature: float | None, max_tokens: int | None, context: ToolContext | None = None,
 ) -> Completion:
     url = f"{base_url.rstrip('/')}/responses"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -124,7 +127,7 @@ async def openai_tool_loop(
             if spec is None:
                 result, is_error = f"Error: unknown tool '{call.get('name')}'", True
             else:
-                result, is_error = await _execute(spec, args)
+                result, is_error = await _execute(spec, args, context)
             _record(metadata, call.get("name", ""), args, result, is_error)
             input_items.append({"type": "function_call_output", "call_id": call.get("call_id"), "output": result})
     raise ValueError("tool loop did not converge")

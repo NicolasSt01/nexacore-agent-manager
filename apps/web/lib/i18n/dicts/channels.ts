@@ -28,22 +28,31 @@ const en = {
     configure: "Configure WhatsApp QR",
     selectClient: "Select a client",
   },
-  future: {
-    comingSoon: "Coming soon",
-    ownerPlaceholder: "Configurable inside each client",
-    connect: "Connect channel",
-    instagram: {
-      name: "Instagram",
-      description: "Reply to direct messages with the knowledge of your agents.",
-    },
-    facebook: {
-      name: "Facebook Messenger",
-      description: "Connect your pages and keep consistent support.",
-    },
-    webchat: {
-      name: "Webchat",
-      description: "Embed an assistant on any website with a single line of code.",
-    },
+  messenger: {
+    status: "Available",
+    title: "Facebook Messenger",
+    description:
+      "Connect a Facebook Page with your own Meta app credentials and answer its inbox with an agent.",
+    ownerPlaceholder: "Choose a client to configure its page",
+    configure: "Configure Messenger",
+    selectClient: "Select a client",
+  },
+  instagram: {
+    status: "Available",
+    title: "Instagram Direct",
+    description:
+      "Answer the direct messages of a professional Instagram account linked to your Facebook Page.",
+    ownerPlaceholder: "Choose a client to configure its account",
+    configure: "Configure Instagram",
+    selectClient: "Select a client",
+  },
+  webchat: {
+    status: "Available",
+    title: "Webchat",
+    description:
+      "Embed an assistant on any website with a single line of code. Each agent has its own snippet.",
+    ownerPlaceholder: "Configured on each agent",
+    configure: "Open agents",
   },
   note: {
     strong: "Each connection belongs to a single client.",
@@ -72,6 +81,7 @@ const en = {
     webhookStep2: "Subscribe the account to the messages, messaging_postbacks and message_reactions fields.",
     webhookStep3: "Send a test message: it will show up in this client's inbox.",
     confirmDisconnect: "Disconnect this channel? The agent will stop replying.",
+    needsAgent: "This client needs at least one agent before connecting this channel.",
   },
 };
 
@@ -104,22 +114,31 @@ const es: typeof en = {
     configure: "Configurar WhatsApp QR",
     selectClient: "Selecciona un cliente",
   },
-  future: {
-    comingSoon: "Próximamente",
-    ownerPlaceholder: "Configurable dentro de cada cliente",
-    connect: "Conectar canal",
-    instagram: {
-      name: "Instagram",
-      description: "Responde mensajes directos con el conocimiento de tus agentes.",
-    },
-    facebook: {
-      name: "Facebook Messenger",
-      description: "Conecta tus páginas y mantén una atención consistente.",
-    },
-    webchat: {
-      name: "Webchat",
-      description: "Inserta un asistente en cualquier sitio web con una línea de código.",
-    },
+  messenger: {
+    status: "Disponible",
+    title: "Facebook Messenger",
+    description:
+      "Conecta una página de Facebook con las credenciales de tu propia app de Meta y responde su bandeja con un agente.",
+    ownerPlaceholder: "Elige un cliente para configurar su página",
+    configure: "Configurar Messenger",
+    selectClient: "Selecciona un cliente",
+  },
+  instagram: {
+    status: "Disponible",
+    title: "Instagram Direct",
+    description:
+      "Responde los mensajes directos de una cuenta profesional de Instagram vinculada a tu página de Facebook.",
+    ownerPlaceholder: "Elige un cliente para configurar su cuenta",
+    configure: "Configurar Instagram",
+    selectClient: "Selecciona un cliente",
+  },
+  webchat: {
+    status: "Disponible",
+    title: "Webchat",
+    description:
+      "Inserta un asistente en cualquier sitio web con una línea de código. Cada agente tiene su propio fragmento.",
+    ownerPlaceholder: "Se configura en cada agente",
+    configure: "Abrir agentes",
   },
   note: {
     strong: "Cada conexión pertenece a un solo cliente.",
@@ -148,6 +167,7 @@ const es: typeof en = {
     webhookStep2: "Suscribe la cuenta a los campos messages, messaging_postbacks y message_reactions.",
     webhookStep3: "Envía un mensaje de prueba: aparecerá en el inbox de este cliente.",
     confirmDisconnect: "¿Desconectar este canal? El agente dejará de responder.",
+    needsAgent: "Este cliente necesita al menos un agente antes de conectar este canal.",
   },
 };
 

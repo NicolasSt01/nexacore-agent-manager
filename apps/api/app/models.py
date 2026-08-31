@@ -94,6 +94,27 @@ class Client(Base):
     quota_blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     encrypted_client_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # --- Outbound email -----------------------------------------------------
+    # Where this client's own notifications land (a new appointment, for
+    # instance). Falls back to portal_email when empty, so a client that only
+    # ever configured the portal still gets notified.
+    notification_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    # Optional per-client SMTP. When configured and verified, the client's mail
+    # goes out from their own address; otherwise it falls back to the agency's
+    # server. See services/mailer.resolve_config for the full chain.
+    smtp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    smtp_host: Mapped[str] = mapped_column(String(255), default="", server_default="")
+    smtp_port: Mapped[int] = mapped_column(Integer, default=587, server_default="587")
+    smtp_user: Mapped[str] = mapped_column(String(255), default="", server_default="")
+    encrypted_smtp_password: Mapped[str | None] = mapped_column(Text, nullable=True)
+    smtp_use_tls: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    smtp_from_email: Mapped[str] = mapped_column(String(320), default="", server_default="")
+    smtp_from_name: Mapped[str] = mapped_column(String(180), default="", server_default="")
+    # Set by a successful test send. Credentials that never passed a test are
+    # not used: a typo here would silently drop the client's notifications
+    # instead of falling back to the agency's working server.
+    smtp_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
@@ -112,6 +133,15 @@ class Client(Base):
     @property
     def portal_password_configured(self) -> bool:
         return bool(self.portal_password_hash)
+
+    @property
+    def smtp_password_configured(self) -> bool:
+        return bool(self.encrypted_smtp_password)
+
+    @property
+    def alert_email(self) -> str | None:
+        """Where to reach this client. Explicit notification address first."""
+        return (self.notification_email or self.portal_email or "").strip() or None
 
 
 class AgencySettings(Base):
@@ -234,6 +264,21 @@ class Agent(Base):
     widget_greeting: Mapped[str] = mapped_column(Text, default="", server_default="")
     widget_color: Mapped[str] = mapped_column(String(20), default="", server_default="")
     widget_position: Mapped[str] = mapped_column(String(10), default="right", server_default="right")
+    # --- Appointment booking (see services/appointments.py) -----------------
+    # When on, the agent gets a built-in schedule_appointment tool: it books the
+    # slot and emails both sides a confirmation with add-to-calendar buttons.
+    scheduling_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Who at the business is notified. Falls back to the client's alert_email.
+    scheduling_owner_email: Mapped[str] = mapped_column(String(320), default="", server_default="")
+    # Shown in the invite: an address, "Video call", a consulting room number.
+    scheduling_location: Mapped[str] = mapped_column(String(255), default="", server_default="")
+    scheduling_duration_minutes: Mapped[int] = mapped_column(Integer, default=60, server_default="60")
+    # Free text in the customer's language, injected into the system prompt so
+    # the agent only offers slots the business actually works.
+    scheduling_hours: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # Whether the agent must obtain the contact's email before booking. Off for
+    # businesses that only need the phone number.
+    scheduling_require_email: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Shared as a reusable template: a polished agent (e.g. "Dental clinic
     # receptionist") that any seller in the agency may clone onto a new client
@@ -614,3 +659,48 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
+
+
+class Appointment(Base):
+    """A meeting the agent booked during a conversation.
+
+    Stored rather than only emailed: the confirmation mail links back here for
+    the calendar file, and the row is what lets us tell a contact their slot is
+    already taken.
+    """
+
+    __tablename__ = "appointments"
+    __table_args__ = (Index("ix_appointments_client_starts", "client_id", "starts_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    agency_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agencies.id", ondelete="CASCADE"), index=True)
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), index=True)
+    agent_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agents.id", ondelete="CASCADE"), index=True)
+    # The chat it came out of. Nullable so a booking survives a purged thread.
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    contact_name: Mapped[str] = mapped_column(String(180), default="", server_default="")
+    contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    contact_phone: Mapped[str] = mapped_column(String(60), default="", server_default="")
+    title: Mapped[str] = mapped_column(String(240), default="", server_default="")
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    location: Mapped[str] = mapped_column(String(255), default="", server_default="")
+    # Always UTC in the database; `timezone` is the IANA zone it was booked in,
+    # kept so the calendar file and the emails read back in local time.
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    timezone: Mapped[str] = mapped_column(String(64), default="UTC", server_default="UTC")
+    status: Mapped[str] = mapped_column(String(20), default="confirmed", server_default="confirmed")
+    # Unguessable id for the public .ics endpoint: the calendar button has to
+    # work from an email client with no session.
+    public_token: Mapped[str] = mapped_column(String(64), default=new_public_id, unique=True, index=True)
+    # Whether each side's confirmation actually went out, so a missing SMTP
+    # setup is visible instead of silent.
+    contact_notified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    owner_notified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    client: Mapped[Client] = relationship()
+    agent: Mapped[Agent] = relationship()

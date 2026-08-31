@@ -15,7 +15,13 @@ export default function AgentsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [clientId, setClientId] = useState("");
   const [search, setSearch] = useState("");
-  useEffect(() => { Promise.all([api<Agent[]>("/agents"), api<Client[]>("/clients")]).then(([a, c]) => { setAgents(a); setClients(c); }); }, []);
+  useEffect(() => {
+    const preferred = new URLSearchParams(window.location.search).get("client") || "";
+    Promise.all([api<Agent[]>("/agents"), api<Client[]>("/clients")]).then(([a, c]) => {
+      setAgents(a); setClients(c);
+      if (preferred && c.some((client) => client.id === preferred)) setClientId(preferred);
+    });
+  }, []);
   const visible = useMemo(() => agents.filter((agent) => (!clientId || agent.client_id === clientId) && `${agent.name} ${agent.client.name} ${agent.description}`.toLowerCase().includes(search.toLowerCase())), [agents, clientId, search]);
   return <div className="page"><PageHead eyebrow={t("agents.list.eyebrow")} title={t("agents.list.title")} description={t("agents.list.description")} action={<Link href="/agents/new" className="button primary"><Plus size={18} /> {t("agents.list.newAgent")}</Link>} />
     <div className="toolbar filters"><label className="search-box"><Search size={18} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("agents.list.searchPlaceholder")} /></label><label className="filter-select">{t("agents.list.clientLabel")}<select value={clientId} onChange={(e) => setClientId(e.target.value)}><option value="">{t("agents.list.allClients")}</option>{clients.map((client) => <option value={client.id} key={client.id}>{client.name}</option>)}</select></label></div>

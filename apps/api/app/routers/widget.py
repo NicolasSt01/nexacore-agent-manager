@@ -151,6 +151,7 @@ async def widget_message(public_id: str, payload: WidgetMessageIn, db: Session =
             db, agent, base_url, api_key, messages,
             temperature=agent.temperature, max_tokens=agent.max_tokens,
             model_override=model_used if swapped else None,
+            conversation=conversation,
         )
     except HTTPException:
         return {"mode": "ai", "reply": None, "messages": []}

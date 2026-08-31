@@ -127,6 +127,48 @@ class ClientOut(ORMModel):
     agents: list[AgentSummary] = []
 
 
+class ClientEmailUpdate(BaseModel):
+    """Partial update of a client's email settings.
+
+    Sent both by the agency panel and by the client from their own portal, so
+    it carries no field either side must not touch.
+    """
+
+    notification_email: EmailStr | None = None
+    smtp_enabled: bool | None = None
+    smtp_host: str | None = Field(default=None, max_length=255)
+    smtp_port: int | None = Field(default=None, ge=1, le=65535)
+    smtp_user: str | None = Field(default=None, max_length=255)
+    # Write-only: the API never returns it, and a blank value keeps the stored one.
+    smtp_password: str | None = Field(default=None, max_length=255)
+    smtp_use_tls: bool | None = None
+    smtp_from_email: EmailStr | None = None
+    smtp_from_name: str | None = Field(default=None, max_length=180)
+
+
+class ClientEmailOut(BaseModel):
+    notification_email: str | None
+    smtp_enabled: bool
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    has_smtp_password: bool
+    smtp_use_tls: bool
+    smtp_from_email: str
+    smtp_from_name: str
+    smtp_verified_at: datetime | None
+    # True when this client's mail leaves from their own server; otherwise it
+    # falls back to the agency's.
+    using_own_smtp: bool
+    # Whether anything can be delivered at all right now, either way.
+    delivery_ready: bool
+    alert_email: str | None
+
+
+class ClientTestEmailRequest(BaseModel):
+    to: EmailStr
+
+
 class ClientDomainSet(BaseModel):
     domain: str = Field(
         min_length=3,
@@ -244,6 +286,12 @@ class AgentBase(BaseModel):
     widget_greeting: str = Field(default="", max_length=2000)
     widget_color: str = Field(default="", max_length=20)
     widget_position: str = Field(default="right", pattern=r"^(right|left)$")
+    scheduling_enabled: bool = False
+    scheduling_owner_email: str = Field(default="", max_length=320)
+    scheduling_location: str = Field(default="", max_length=255)
+    scheduling_duration_minutes: int = Field(default=60, ge=5, le=720)
+    scheduling_hours: str = Field(default="", max_length=2000)
+    scheduling_require_email: bool = True
     is_template: bool = False
     template_label: str = Field(default="", max_length=180)
     is_active: bool = True
@@ -310,6 +358,12 @@ class AgentUpdate(BaseModel):
     widget_greeting: str | None = Field(default=None, max_length=2000)
     widget_color: str | None = Field(default=None, max_length=20)
     widget_position: str | None = Field(default=None, pattern=r"^(right|left)$")
+    scheduling_enabled: bool | None = None
+    scheduling_owner_email: str | None = Field(default=None, max_length=320)
+    scheduling_location: str | None = Field(default=None, max_length=255)
+    scheduling_duration_minutes: int | None = Field(default=None, ge=5, le=720)
+    scheduling_hours: str | None = Field(default=None, max_length=2000)
+    scheduling_require_email: bool | None = None
     is_active: bool | None = None
 
 
@@ -349,6 +403,12 @@ class AgentOut(ORMModel):
     widget_greeting: str
     widget_color: str
     widget_position: str
+    scheduling_enabled: bool = False
+    scheduling_owner_email: str = ""
+    scheduling_location: str = ""
+    scheduling_duration_minutes: int = 60
+    scheduling_hours: str = ""
+    scheduling_require_email: bool = True
     is_active: bool
     created_at: datetime
     updated_at: datetime

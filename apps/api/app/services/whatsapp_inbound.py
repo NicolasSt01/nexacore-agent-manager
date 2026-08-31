@@ -267,6 +267,7 @@ async def generate_reply(db: Session, channel, conversation: Conversation, usage
             temperature=agent.temperature,
             max_tokens=agent.max_tokens,
             model_override=model_used if swapped else None,
+            conversation=conversation,
         )
     except Exception as exc:
         channel.last_error = f"Message received, but the agent could not reply: {str(exc)[:400]}"

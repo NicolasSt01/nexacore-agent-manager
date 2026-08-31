@@ -7,7 +7,18 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import get_current_user, require_superadmin
-from ..models import Agent, Client, Conversation, Message, UsageRecord, User, WhatsAppChannel, now_utc
+from ..models import (
+    Agent,
+    Client,
+    Conversation,
+    Message,
+    MetaMessagingChannel,
+    UsageRecord,
+    User,
+    WhatsAppChannel,
+    WhatsAppCloudChannel,
+    now_utc,
+)
 from ..services import billing as billing_service
 from ..schemas import DashboardMetrics, DashboardOut, FinanceDashboardOut
 
@@ -29,15 +40,20 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
     conversations = db.scalar(
         select(func.count(Conversation.id)).where(Conversation.agency_id == agency_id)
     ) or 0
-    channels = db.scalar(
-        select(func.count(WhatsAppChannel.id)).where(WhatsAppChannel.agency_id == agency_id)
-    ) or 0
-    connected_channels = db.scalar(
-        select(func.count(WhatsAppChannel.id)).where(
-            WhatsAppChannel.agency_id == agency_id,
-            WhatsAppChannel.status == "connected",
-        )
-    ) or 0
+    # Every channel kind counts: WhatsApp QR, WhatsApp Cloud, Messenger and
+    # Instagram all share the same "connected" status vocabulary.
+    channels = 0
+    connected_channels = 0
+    for model in (WhatsAppChannel, WhatsAppCloudChannel, MetaMessagingChannel):
+        channels += db.scalar(
+            select(func.count(model.id)).where(model.agency_id == agency_id)
+        ) or 0
+        connected_channels += db.scalar(
+            select(func.count(model.id)).where(
+                model.agency_id == agency_id,
+                model.status == "connected",
+            )
+        ) or 0
     recent_agents = db.scalars(
         select(Agent).where(Agent.agency_id == agency_id).order_by(Agent.created_at.desc()).limit(5)
     ).all()
