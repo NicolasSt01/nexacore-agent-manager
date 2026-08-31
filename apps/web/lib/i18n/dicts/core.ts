@@ -32,6 +32,8 @@ const en = {
     templates: "Templates",
     finance: "Finance",
     team: "Team",
+    email: "Email",
+    models: "Models",
     settings: "Settings",
   },
   shell: {
@@ -123,6 +125,8 @@ const es: typeof en = {
     templates: "Plantillas",
     finance: "Finanzas",
     team: "Equipo",
+    email: "Correo",
+    models: "Modelos",
     settings: "Configuración",
   },
   shell: {

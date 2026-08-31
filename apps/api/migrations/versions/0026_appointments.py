@@ -14,26 +14,31 @@ branch_labels = None
 depends_on = None
 
 
+# Boolean defaults are dialect-aware expressions, never the strings "false"/
+# "true": ADD COLUMN backfills existing rows with the literal default, and on
+# SQLite a boolean column has numeric affinity, so the text "false" is stored
+# as-is and read back as a truthy string. sa.false() renders 0 there and
+# `false` on PostgreSQL.
 CLIENT_COLUMNS = (
     ("notification_email", sa.String(320), True, None),
-    ("smtp_enabled", sa.Boolean(), False, "false"),
+    ("smtp_enabled", sa.Boolean(), False, sa.false()),
     ("smtp_host", sa.String(255), False, ""),
     ("smtp_port", sa.Integer(), False, "587"),
     ("smtp_user", sa.String(255), False, ""),
     ("encrypted_smtp_password", sa.Text(), True, None),
-    ("smtp_use_tls", sa.Boolean(), False, "true"),
+    ("smtp_use_tls", sa.Boolean(), False, sa.true()),
     ("smtp_from_email", sa.String(320), False, ""),
     ("smtp_from_name", sa.String(180), False, ""),
     ("smtp_verified_at", sa.DateTime(timezone=True), True, None),
 )
 
 AGENT_COLUMNS = (
-    ("scheduling_enabled", sa.Boolean(), "false"),
+    ("scheduling_enabled", sa.Boolean(), sa.false()),
     ("scheduling_owner_email", sa.String(320), ""),
     ("scheduling_location", sa.String(255), ""),
     ("scheduling_duration_minutes", sa.Integer(), "60"),
     ("scheduling_hours", sa.Text(), ""),
-    ("scheduling_require_email", sa.Boolean(), "true"),
+    ("scheduling_require_email", sa.Boolean(), sa.true()),
 )
 
 
@@ -61,8 +66,8 @@ def upgrade() -> None:
         sa.Column("timezone", sa.String(64), nullable=False, server_default="UTC"),
         sa.Column("status", sa.String(20), nullable=False, server_default="confirmed"),
         sa.Column("public_token", sa.String(64), nullable=False, unique=True),
-        sa.Column("contact_notified", sa.Boolean(), nullable=False, server_default="false"),
-        sa.Column("owner_notified", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("contact_notified", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("owner_notified", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
