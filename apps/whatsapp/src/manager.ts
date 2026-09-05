@@ -1,9 +1,13 @@
 import makeWASocket, {
   Browsers,
+  DEFAULT_CONNECTION_CONFIG,
   DisconnectReason,
   downloadMediaMessage,
+  fetchLatestBaileysVersion,
+  fetchLatestWaWebVersion,
   type WASocket,
   type WAMessage,
+  type WAVersion,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import QRCode from "qrcode";
@@ -13,6 +17,57 @@ import { incomingMedia, incomingText, isDirectIncoming } from "./messages.js";
 
 // Skip forwarding media larger than this; the backend also caps at 20 MB.
 const MAX_MEDIA_BYTES = 18 * 1024 * 1024;
+
+// How long a resolved WhatsApp Web build is reused. Reconnects can be frequent
+// and the build changes every few days, so re-fetching per connection would be
+// wasted traffic against web.whatsapp.com.
+const WA_VERSION_TTL_MS = 6 * 60 * 60 * 1000;
+
+let cachedVersion: { value: WAVersion; fetchedAt: number } | undefined;
+
+// --- Typing indicator ------------------------------------------------------
+// An account that answers long messages instantly, around the clock, reads as
+// automation. Showing "typing…" for a beat before every reply costs nothing and
+// makes the account behave like the person it is standing in for.
+//
+// Length-aware rather than fixed: two seconds of typing for "Sí" looks as wrong
+// as two seconds for a full paragraph. Set MIN and MAX to the same value for a
+// fixed delay.
+const typingEnabled = (process.env.WHATSAPP_TYPING_ENABLED || "true").toLowerCase() !== "false";
+const typingMsPerChar = Number(process.env.WHATSAPP_TYPING_MS_PER_CHAR || 30);
+const typingMinMs = Number(process.env.WHATSAPP_TYPING_MIN_MS || 1000);
+const typingMaxMs = Number(process.env.WHATSAPP_TYPING_MAX_MS || 4000);
+
+function typingDurationFor(text: string): number {
+  if (!typingEnabled) return 0;
+  const perChar = Number.isFinite(typingMsPerChar) ? typingMsPerChar : 30;
+  const min = Number.isFinite(typingMinMs) ? typingMinMs : 1000;
+  const max = Number.isFinite(typingMaxMs) ? typingMaxMs : 4000;
+  return Math.max(0, Math.min(Math.max(min, text.length * perChar), Math.max(min, max)));
+}
+
+/** Show "typing…" for a moment, then send.
+ *
+ * The presence sequence mirrors what Baileys documents: subscribe, compose,
+ * pause. Presence is cosmetic, so every step is best-effort — a chat state the
+ * server rejects must never cost the customer their reply.
+ */
+async function sendTyped(socket: WASocket, remoteJid: string, text: string) {
+  const pause = typingDurationFor(text);
+  if (pause > 0) {
+    try {
+      await socket.presenceSubscribe(remoteJid);
+      await socket.sendPresenceUpdate("composing", remoteJid);
+    } catch {
+      // Keep the pause anyway: the delay itself is half the point.
+    }
+    await new Promise((done) => setTimeout(done, pause));
+    try {
+      await socket.sendPresenceUpdate("paused", remoteJid);
+    } catch {}
+  }
+  return socket.sendMessage(remoteJid, { text });
+}
 
 type ChannelConfig = {
   id: string;
@@ -83,7 +138,7 @@ async function processIncoming(channelId: string, socket: WASocket, message: WAM
     body: JSON.stringify(body),
   });
   if (!result.reply) return;
-  const sent = await socket.sendMessage(remoteJid, { text: result.reply });
+  const sent = await sendTyped(socket, remoteJid, result.reply);
   if (result.outbound_message_id && sent?.key.id) {
     await backend(`/channels/${channelId}/outbound-confirm`, {
       method: "POST",
@@ -95,6 +150,39 @@ async function processIncoming(channelId: string, socket: WASocket, message: WAM
   }
 }
 
+/** The WhatsApp Web build to advertise on the wire.
+ *
+ * Baileys ships a hardcoded build that only moves when a new release is
+ * published, so it drifts behind the real one within days and WhatsApp then
+ * labels our messages as sent from an outdated version. Sources are tried
+ * newest-first: the live build scraped from web.whatsapp.com, then the list
+ * Baileys maintains, then the bundled constant.
+ *
+ * A lookup failure never blocks a connection — an old build still connects,
+ * and refusing to come online would be far worse than an outdated label.
+ */
+async function resolveWaVersion(): Promise<WAVersion> {
+  if (cachedVersion && Date.now() - cachedVersion.fetchedAt < WA_VERSION_TTL_MS) {
+    return cachedVersion.value;
+  }
+  for (const source of [fetchLatestWaWebVersion, fetchLatestBaileysVersion]) {
+    try {
+      // A failed lookup reports itself in `error` and hands back the bundled
+      // build rather than throwing. Caching that would pin us to the stale
+      // version for hours, so it counts as a miss and the next source is tried.
+      const { version, error } = await source({});
+      if (!error && Array.isArray(version) && version.length === 3) {
+        cachedVersion = { value: version, fetchedAt: Date.now() };
+        return version;
+      }
+    } catch {
+      // Try the next source.
+    }
+  }
+  return DEFAULT_CONNECTION_CONFIG.version as WAVersion;
+}
+
+
 export async function connectChannel(channelId: string): Promise<void> {
   const current = runtimes.get(channelId);
   if (current && !current.stopRequested) return;
@@ -103,7 +191,10 @@ export async function connectChannel(channelId: string): Promise<void> {
   await setStatus(channelId, config.auth_state ? "reconnecting" : "connecting");
 
   const { state, persist } = createDatabaseAuth(channelId, config.auth_state || undefined);
+  const version = await resolveWaVersion();
+  console.log(`[WhatsApp ${channelId}] Connecting as WhatsApp Web ${version.join(".")}`);
   const socket = makeWASocket({
+    version,
     auth: state,
     logger,
     browser: Browsers.macOS("OpenLivery"),
@@ -186,7 +277,7 @@ export async function disconnectChannel(channelId: string): Promise<void> {
 export async function sendMessage(channelId: string, remoteJid: string, text: string): Promise<string> {
   const runtime = runtimes.get(channelId);
   if (!runtime || runtime.stopRequested) throw new Error("WhatsApp is not connected")
-  const sent = await runtime.socket.sendMessage(remoteJid, { text });
+  const sent = await sendTyped(runtime.socket, remoteJid, text);
   if (!sent?.key.id) throw new Error("WhatsApp did not confirm the send")
   return sent.key.id;
 }
