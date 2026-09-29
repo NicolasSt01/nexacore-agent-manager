@@ -6,6 +6,7 @@
 *.dump
 *.sqlite*
 work/
+.worktrees/
 backups/
 __pycache__/
 *.py[cod]
