@@ -242,6 +242,11 @@ export async function connectChannel(channelId: string): Promise<void> {
         if (latest !== runtime) return;
         const code = errorCode(lastDisconnect?.error);
         const loggedOut = code === DisconnectReason.loggedOut || code === DisconnectReason.badSession;
+        // The reason only reached the backend as `last_error`, where the next
+        // reconnect overwrites it. Without it in the log, a "Connecting…" line
+        // has no matching cause and a healthy rotation looks like a crash loop.
+        const reason = DisconnectReason[code as number] || (code ? `code ${code}` : "unknown");
+        console.log(`[WhatsApp ${channelId}] Connection closed (${reason})${runtime.stopRequested ? ", stop requested" : loggedOut ? ", session is gone" : ", reconnecting in 3s"}`);
         if (runtime.stopRequested || loggedOut) {
           runtimes.delete(channelId);
           await backend(`/channels/${channelId}/auth`, { method: "DELETE" });
