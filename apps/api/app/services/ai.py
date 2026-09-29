@@ -11,6 +11,18 @@ ANTHROPIC_VERSION = "2023-06-01"
 # services/tools/runner.py can never disagree about which API a provider talks.
 CHAT_COMPLETIONS_PROVIDERS = ("openrouter", "deepseek", "qwen", "opencode", "opencode_go")
 
+# OpenCode GO requests must identify with their own user agent and carry a
+# stable per-conversation session id so the gateway can route and cache.
+# See https://opencode.ai/docs/go/#where-can-i-use-it
+OPENCODE_GO_UA = "nexacore/1.0"
+
+
+def opencode_go_headers(provider: str, session_id: str | None) -> dict:
+    """Headers OpenCode GO demands, or {} for every other provider."""
+    if provider != "opencode_go":
+        return {}
+    return {"User-Agent": OPENCODE_GO_UA, "x-opencode-session": session_id or "global"}
+
 
 @dataclass
 class Completion:
@@ -35,17 +47,19 @@ async def chat_completion(
     *,
     temperature: float | None = None,
     max_tokens: int | None = None,
+    session_id: str | None = None,
 ) -> Completion:
     """Generate a reply using the provider's API."""
+    extra = opencode_go_headers(provider, session_id)
     try:
         if provider == "anthropic":
             return await _anthropic_messages(base_url, api_key, model, messages, temperature, max_tokens)
         if provider in CHAT_COMPLETIONS_PROVIDERS:
-            return await _openai_chat_completions(base_url, api_key, model, messages, temperature, max_tokens)
+            return await _openai_chat_completions(base_url, api_key, model, messages, temperature, max_tokens, extra_headers=extra)
         try:
-            return await _openai_responses(base_url, api_key, model, messages, temperature, max_tokens)
+            return await _openai_responses(base_url, api_key, model, messages, temperature, max_tokens, extra_headers=extra)
         except Exception:
-            return await _openai_chat_completions(base_url, api_key, model, messages, temperature, max_tokens)
+            return await _openai_chat_completions(base_url, api_key, model, messages, temperature, max_tokens, extra_headers=extra)
     except HTTPException:
         raise
     except (httpx.HTTPError, KeyError, ValueError, IndexError) as exc:
@@ -55,9 +69,9 @@ async def chat_completion(
         ) from exc
 
 
-async def _openai_chat_completions(base_url, api_key, model, messages, temperature, max_tokens) -> Completion:
+async def _openai_chat_completions(base_url, api_key, model, messages, temperature, max_tokens, *, extra_headers: dict | None = None) -> Completion:
     url = f"{base_url.rstrip('/')}/chat/completions"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", **(extra_headers or {})}
     base_payload: dict = {"model": model, "messages": messages}
     sampling: dict = {}
     if temperature is not None:
@@ -79,9 +93,9 @@ async def _openai_chat_completions(base_url, api_key, model, messages, temperatu
     )
 
 
-async def _openai_responses(base_url, api_key, model, messages, temperature, max_tokens) -> Completion:
+async def _openai_responses(base_url, api_key, model, messages, temperature, max_tokens, *, extra_headers: dict | None = None) -> Completion:
     url = f"{base_url.rstrip('/')}/responses"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", **(extra_headers or {})}
     instructions = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
     input_items = [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] != "system"]
     base_payload: dict = {"model": model, "input": input_items}

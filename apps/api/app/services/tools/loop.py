@@ -52,9 +52,10 @@ def _record(metadata: list[dict], name: str, args: dict, result: str, is_error: 
 async def anthropic_tool_loop(
     base_url: str, api_key: str, model: str, messages: list[dict], specs: list[ToolSpec],
     temperature: float | None, max_tokens: int | None, context: ToolContext | None = None,
+    *, extra_headers: dict | None = None,
 ) -> Completion:
     url = f"{base_url.rstrip('/')}/messages"
-    headers = {"x-api-key": api_key, "anthropic-version": ANTHROPIC_VERSION, "Content-Type": "application/json"}
+    headers = {"x-api-key": api_key, "anthropic-version": ANTHROPIC_VERSION, "Content-Type": "application/json", **(extra_headers or {})}
     system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
     convo: list[dict] = [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] in ("user", "assistant")]
     tools = [{"name": s.name, "description": s.description, "input_schema": s.input_schema} for s in specs]
@@ -99,9 +100,10 @@ async def anthropic_tool_loop(
 async def openai_tool_loop(
     base_url: str, api_key: str, model: str, messages: list[dict], specs: list[ToolSpec],
     temperature: float | None, max_tokens: int | None, context: ToolContext | None = None,
+    *, extra_headers: dict | None = None,
 ) -> Completion:
     url = f"{base_url.rstrip('/')}/responses"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", **(extra_headers or {})}
     instructions = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
     input_items: list[dict] = [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] != "system"]
     # The Responses API uses a flat function-tool shape (unlike chat completions).
@@ -157,6 +159,7 @@ async def openai_tool_loop(
 async def openai_chat_tool_loop(
     base_url: str, api_key: str, model: str, messages: list[dict], specs: list[ToolSpec],
     temperature: float | None, max_tokens: int | None, context: ToolContext | None = None,
+    *, extra_headers: dict | None = None,
 ) -> Completion:
     """Tool calling over /chat/completions, which every OpenAI-compatible
     provider implements — OpenRouter, DeepSeek, Qwen and OpenCode among them.
@@ -166,7 +169,7 @@ async def openai_chat_tool_loop(
     reply down with it, not just the tool call.
     """
     url = f"{base_url.rstrip('/')}/chat/completions"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", **(extra_headers or {})}
     convo: list[dict] = [{"role": m["role"], "content": m["content"]} for m in messages]
     tools = [
         {"type": "function", "function": {"name": s.name, "description": s.description, "parameters": s.input_schema}}

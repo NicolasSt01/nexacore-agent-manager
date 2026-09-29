@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...models import Agent, AgentTool, Conversation
-from ..ai import CHAT_COMPLETIONS_PROVIDERS, Completion, chat_completion
+from ..ai import CHAT_COMPLETIONS_PROVIDERS, Completion, chat_completion, opencode_go_headers
 from .builtin import ToolContext, builtin_specs
 from .loop import ResponsesUnsupported, anthropic_tool_loop, openai_chat_tool_loop, openai_tool_loop
 from .specs import build_tool_specs
@@ -49,24 +49,31 @@ async def run_completion(
     # The circuit breaker swaps the model under subscription pressure, so the
     # agent's configured model is a default, not a given.
     model = (model_override or agent.model).strip()
+    # OpenCode GO wants a stable per-conversation session id; the conversation
+    # id is that id for every call this conversation triggers.
+    session_id = str(conversation.id) if conversation else None
     rows = db.scalars(select(AgentTool).where(AgentTool.agent_id == agent.id, AgentTool.enabled.is_(True))).all()
     specs = [*builtin_specs(agent), *build_tool_specs(list(rows))]
     if not specs:
-        return await chat_completion(agent.provider, base_url, api_key, model, messages, temperature=temperature, max_tokens=max_tokens)
+        return await chat_completion(
+            agent.provider, base_url, api_key, model, messages,
+            temperature=temperature, max_tokens=max_tokens, session_id=session_id,
+        )
     messages = _with_tool_rules(messages)
     context = ToolContext(db=db, agent=agent, conversation=conversation)
     args = (base_url, api_key, model, messages, specs, temperature, max_tokens, context)
+    extra_headers = opencode_go_headers(agent.provider, session_id)
     try:
         if agent.provider == "anthropic":
-            return await anthropic_tool_loop(*args)
+            return await anthropic_tool_loop(*args, extra_headers=extra_headers)
         if agent.provider in CHAT_COMPLETIONS_PROVIDERS:
-            return await openai_chat_tool_loop(*args)
+            return await openai_chat_tool_loop(*args, extra_headers=extra_headers)
         try:
-            return await openai_tool_loop(*args)
+            return await openai_tool_loop(*args, extra_headers=extra_headers)
         except ResponsesUnsupported:
             # A custom base_url that only implements /chat/completions. Safe to
             # retry: the exception is raised before any tool has run.
-            return await openai_chat_tool_loop(*args)
+            return await openai_chat_tool_loop(*args, extra_headers=extra_headers)
     except HTTPException:
         raise
     except (httpx.HTTPError, KeyError, ValueError, IndexError) as exc:

@@ -119,6 +119,7 @@ async def refresh_if_needed(
             [{"role": "system", "content": PROMPT}, {"role": "user", "content": user_content}],
             temperature=0.2,
             max_tokens=MAX_SUMMARY_TOKENS,
+            session_id=str(conversation.id),
         )
     except Exception as exc:  # noqa: BLE001 - a missing summary is not worth a failed reply
         logger.warning("Could not refresh the contact summary for %s: %s", conversation.id, exc)
